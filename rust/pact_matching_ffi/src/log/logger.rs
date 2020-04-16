@@ -23,7 +23,9 @@ pub(crate) fn add_sink(dispatch: Dispatch) -> Result<(), LoggerError> {
         Some(top_level_dispatch) => {
             let top_level_dispatch = top_level_dispatch.chain(dispatch);
 
-            LOGGER.with(|logger| *logger.borrow_mut() = Some(top_level_dispatch));
+            LOGGER.with(|logger| {
+                *logger.borrow_mut() = Some(top_level_dispatch)
+            });
 
             Ok(())
         }

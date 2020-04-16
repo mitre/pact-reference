@@ -9,5 +9,7 @@ mod sink;
 mod status;
 mod target;
 
-pub use crate::log::ffi::{logger_apply, logger_attach_sink, logger_init};
+pub use crate::log::ffi::{
+    logger_apply, logger_attach_sink, logger_init,
+};
 pub(crate) use crate::log::target::TARGET;

@@ -37,9 +37,15 @@ impl From<SetLoggerError> for Status {
 impl From<SinkSpecifierError> for Status {
     fn from(err: SinkSpecifierError) -> Status {
         match err {
-            SinkSpecifierError::UnknownSinkType { .. } => Status::UnknownSinkType,
-            SinkSpecifierError::MissingFilePath { .. } => Status::MissingFilePath,
-            SinkSpecifierError::CantMakeFile { .. } => Status::CantOpenSinkToFile,
+            SinkSpecifierError::UnknownSinkType { .. } => {
+                Status::UnknownSinkType
+            }
+            SinkSpecifierError::MissingFilePath { .. } => {
+                Status::MissingFilePath
+            }
+            SinkSpecifierError::CantMakeFile { .. } => {
+                Status::CantOpenSinkToFile
+            }
         }
     }
 }

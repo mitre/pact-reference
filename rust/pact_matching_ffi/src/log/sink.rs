@@ -48,7 +48,9 @@ impl<'a> TryFrom<&'a str> for Sink {
         let pat = "file ";
 
         if s.starts_with(pat).not() {
-            return Err(SinkSpecifierError::UnknownSinkType { name: s.to_owned() });
+            return Err(SinkSpecifierError::UnknownSinkType {
+                name: s.to_owned(),
+            });
         }
 
         match s.get(pat.len()..) {
@@ -60,7 +62,10 @@ impl<'a> TryFrom<&'a str> for Sink {
                         // PANIC SAFETY: This `unwrap` is fine because the `PathBuf` impl of `FromStr` has an associated
                         // `Self::Error` type of `Infallible`, indicating the operation always succeeds.
                         let path = PathBuf::from_str(remainder).unwrap();
-                        Err(SinkSpecifierError::CantMakeFile { path, source })
+                        Err(SinkSpecifierError::CantMakeFile {
+                            path,
+                            source,
+                        })
                     }
                 }
             }

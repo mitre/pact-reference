@@ -71,17 +71,16 @@ pub extern "C" fn logger_attach_sink(
     let level_filter: LogLevelFilter = level_filter.into();
 
     // Construct a dispatcher from the sink and level filter.
-    let dispatch =
-        Into::<Dispatch>::into(sink)
-            .level(level_filter)
-            .format(|out, message, record| {
-                out.finish(format_args!(
-                    "[{}][{}] {}",
-                    record.level(),
-                    record.target(),
-                    message
-                ))
-            });
+    let dispatch = Into::<Dispatch>::into(sink)
+        .level(level_filter)
+        .format(|out, message, record| {
+            out.finish(format_args!(
+                "[{}][{}] {}",
+                record.level(),
+                record.target(),
+                message
+            ))
+        });
 
     // Take the existing logger, if there is one, add a new sink to it, and put it back.
     let status = match add_sink(dispatch) {
