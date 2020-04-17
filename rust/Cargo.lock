@@ -1524,6 +1524,7 @@ dependencies = [
  "libc",
  "log 0.4.8",
  "pact_matching",
+ "serde_json",
  "thiserror",
  "zeroize",
 ]
