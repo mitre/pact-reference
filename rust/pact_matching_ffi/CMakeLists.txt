@@ -2,10 +2,10 @@
 # CMAKE VERSION
 #############################################################################
 
-# Set the minimum to 3.10. This is arbitrary and we should probably try to
+# Set the minimum to 3.15. This is arbitrary and we should probably try to
 # test everything with older CMake versions once this is all written, to
 # figure out an actual lower-bound.
-cmake_minimum_required(VERSION 3.10...3.17)
+cmake_minimum_required(VERSION 3.15...3.17)
 
 # Set policies appropriately, so it knows when to warn about policy
 # violations.
@@ -31,12 +31,24 @@ file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/Cargo.toml" VERSION_STRING REGEX ${VER
 string(REGEX REPLACE ${VERSION_REGEX} "\\1" VERSION_STRING "${VERSION_STRING}")
 
 #############################################################################
+# PROJECT DESCRIPTION
+#
+# This is pulled from the `Cargo.toml` file.
+#############################################################################
+
+set(DESCRIPTION_REGEX "description[\\s]*=[\\s]*\"(.+)\"")
+
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/Cargo.toml" DESCRIPTION_STRING REGEX ${DESCRIPTION_REGEX})
+
+string(REGEX REPLACE ${DESCRIPTION_REGEX} "\\1" DESCRIPTION_STRING "${DESCRIPTION_STRING}")
+
+#############################################################################
 # PROJECT DECLARATION
 #############################################################################
 
 project(PactMatchingFfi
         VERSION "${VERSION_STRING}"
-        DESCRIPTION "Foreign-function interface for pact_matching"
+        DESCRIPTION "${DESCRIPTION_STRING}"
         LANGUAGES NONE)
 
 #############################################################################
@@ -60,32 +72,74 @@ if(EXISTS "${LOC_PATH}")
 endif()
 
 #############################################################################
-# LIBRARY
+# DEFAULT BUILD TYPE
 #
-# Require out-of-source builds for this project. It keeps things much simpler
-# and cleaner.
+# Make release the default build type
 #############################################################################
 
-# TODO: Add code to find Cargo and find Cbindgen
+set(default_build_type "Release")
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+  message(STATUS "Setting build type to '${default_build_type}' as none was specified.")
+  set(CMAKE_BUILD_TYPE "${default_build_type}" CACHE STRING "Choose the type of build." FORCE)
+  # Set the possible values of build type
+  set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release")
+endif()
 
-if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-    set(CARGO_CMD cargo build)
+
+#############################################################################
+# Find Cargo & Cbindgen
+#############################################################################
+
+# Uses the finder specified in `cmake/FindCargo.cmake`
+find_package(Cargo REQUIRED)
+
+# Uses the finder specified in `cmake/FindCbindgen.cmake`
+find_package(Cbindgen REQUIRED)
+
+#############################################################################
+# LIBRARY
+#
+# Defines the target for the `pact_matching_ffi` crate and teaches CMake how
+# to run Cargo and where to find the output build artifacts.
+#############################################################################
+
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    set(CARGO_BUILD_TYPE "")
     set(TARGET_DIR "debug")
-else ()
-    set(CARGO_CMD cargo build --release)
+else()
+    set(CARGO_BUILD_TYPE "--release")
     set(TARGET_DIR "release")
-endif ()
+endif()
 
+if(WIN32)
+    set(CARGO_OUTPUT_FILE "pact_matching_ffi.dll")
+else()
+    set(CARGO_OUTPUT_FILE "pact_matching_ffi.a")
+endif()
+
+# Add target for the library
 add_custom_target(pact_matching_ffi ALL
-    # Run the Cargo build.
-    COMMAND CARGO_TARGET_DIR=${CMAKE_CURRENT_BINARY_DIR} ${CARGO_CMD} 
-    # TODO: Add cbindgen call to generate the header.
+    COMMENT "Building library file with Cargo"
+    COMMAND ${CARGO_EXECUTABLE} build ${CARGO_BUILD_TYPE} --target-dir ${CMAKE_CURRENT_BINARY_DIR}
+    VERBATIM
+    BYPRODUCTS "${CMAKE_CURRENT_BINARY_DIR}/${TARGET_DIR}/${CARGO_OUTPUT_FILE}"
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+
+# Set the location for the pact_matching_ffi target
 set_target_properties(pact_matching_ffi PROPERTIES LOCATION ${CMAKE_CURRENT_BINARY_DIR})
 
-# We don't need the include directory, but users of this library will.
-target_include_directories(pact_matching_ffi INTERFACE include)
+# Add command for cbindgen to generate the header file
+add_custom_command(OUTPUT "${CMAKE_CURRENT_SOURCE_DIR}/include/pact_matching.h"
+    COMMAND ${CBINDGEN_EXECUTABLE} --config ${CMAKE_CURRENT_SOURCE_DIR}/cbindgen.toml --crate pact_matching_ffi --output ${CMAKE_CURRENT_SOURCE_DIR}/include/pact_matching.h
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 
-# TODO: Finish this file https://cliutils.gitlab.io/modern-cmake/chapters/basics/programs.html
+# Add custom target, set to always run, which generates the header
+add_custom_target(generate_header ALL
+    DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/include/pact_matching.h"
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 
-# Reference: https://michael-f-bryan.github.io/rust-ffi-guide/setting_up.html
+# Teach CMake to install the archive file built by the pact_matching_ffi target
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/${CARGO_OUTPUT_FILE}" TYPE LIB)
+
+# Teach CMake to install the header file built by the generate_header target
+install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/include/pact_matching.h TYPE INCLUDE)
