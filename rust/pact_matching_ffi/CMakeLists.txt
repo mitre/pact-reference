@@ -184,6 +184,18 @@ endif()
 # The path to the library file.
 set(CARGO_LIBRARY_FILE "${CARGO_TARGET_DIR}/${TARGET_TYPE}/${CARGO_LIBRARY_NAME}")
 
+# On Windows, dynamic linking requires both a .dll file (which will be dynamically
+# linked), and a library file (which describes _how_ to link to the DLL, and will
+# itself be statically linked). We need to make sure both are included on installation.
+#
+# For Rust specifically, the name of the .lib file is the name of the .dll file with
+# .lib appended (so the extension is .dll.lib).
+if(WIN32)
+    set(CARGO_INSTALL_FILES ${CARGO_LIBRARY_FILE} "${CARGO_LIBRARY_FILE}.lib")
+else()
+    set(CARGO_INSTALL_FILES ${CARGO_LIBRARY_FILE})
+endif()
+
 # Name of the header file.
 set(CBINDGEN_HEADER_NAME "pact_matching.h")
 
@@ -211,8 +223,8 @@ add_custom_target(build_library ALL
     COMMENT "Building library file with cargo"
     DEPENDS ${CARGO_LIBRARY_FILE})
 
-# Teach CMake to install the library file built by the pact_matching_ffi target
-install(FILES "${CARGO_LIBRARY_FILE}" TYPE LIB)
+# Teach CMake to install the library file(s) built by the pact_matching_ffi target
+install(FILES ${CARGO_INSTALL_FILES} TYPE LIB)
 
 #################################################################################################
 # HEADER
@@ -237,3 +249,51 @@ add_custom_target(generate_header ALL
 
 # Teach CMake to install the header file built by the generate_header target
 install(FILES "${CBINDGEN_HEADER_FILE}" TYPE INCLUDE)
+
+#################################################################################################
+# PACKAGE FILES
+#
+# Defines packaging information for the current project, so it can be used via `find_package`.
+#################################################################################################
+
+# Bring in some functions to help generate the config files.
+include(CMakePackageConfigHelpers)
+
+# Set the name of the final package configuration file.
+set(PACKAGE_CONFIG_NAME "PactMatchingFfiConfig.cmake")
+
+# Set the name of the final package version file.
+set(PACKAGE_VERSION_NAME "PactMatchingFfiConfigVersion.cmake")
+
+# Set the path to the package configuration input file.
+set(PACKAGE_CONFIG_INPUT_FILE "cmake/${PACKAGE_CONFIG_NAME}.in")
+
+# Set the path to the package configuration output file.
+set(PACKAGE_CONFIG_FILE "${CMAKE_CURRENT_BINARY_DIR}/${PACKAGE_CONFIG_NAME}")
+
+# Set locations in the installation prefix to put the relevant files.
+set(INCLUDE_INSTALL_DIR "include")
+set(LIB_INSTALL_DIR "lib")
+
+# Relative path (within install prefix) to place the configuration file.
+set(PACKAGE_CONFIG_INSTALL_DIR "${LIB_INSTALL_DIR}/cmake")
+
+# Set the path to the generated package version file.
+set(PACKAGE_VERSION_FILE "${CMAKE_CURRENT_BINARY_DIR}/${PACKAGE_VERSION_NAME}")
+
+# Generate the configuration file from the input and put it in the right place
+configure_package_config_file(
+    # Input file
+    ${PACKAGE_CONFIG_INPUT_FILE}
+    # Output file
+    ${PACKAGE_CONFIG_FILE}
+    # Installation destination within the install prefix dir
+    INSTALL_DESTINATION ${PACKAGE_CONFIG_INSTALL_DIR}
+    # Variables to pass along to the input file
+    PATH_VARS INCLUDE_INSTALL_DIR LIB_INSTALL_DIR)
+
+# Generate the version file based on the project version info.
+write_basic_package_version_file(${PACKAGE_VERSION_FILE} COMPATIBILITY SameMajorVersion)
+
+# Install config files in the proper directory.
+install(FILES ${PACKAGE_CONFIG_FILE} ${PACKAGE_VERSION_FILE} DESTINATION ${PACKAGE_CONFIG_INSTALL_DIR})
