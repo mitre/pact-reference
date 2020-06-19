@@ -31,9 +31,20 @@ project(C_EXAMPLE_1
 # and cleaner.
 #################################################################################################
 
+# Set a path to the CMake config (this file)
 file(TO_CMAKE_PATH "${PROJECT_BINARY_DIR}/CMakeLists.txt" LOC_PATH)
-if(EXISTS "${LOC_PATH}")
-    message(FATAL_ERROR "You cannot build in a source directory (or any directory with a CMakeLists.txt file). Please make a build subdirectory. Feel free to remove CMakeCache.txt and CMakeFiles.")
+
+# Define the error message to potentially be printed.
+set(OOS_MSG "\
+You cannot build in a source directory (or any directory with a CMakeLists.txt file). \
+Please make a build subdirectory. \
+Feel free to remove CMakeCache.txt and CMakeFiles.
+")
+
+# If that file path exists, we're doing an in-source build, so we should exit with a fatal
+# error complaining only out-of-source builds are supported.
+if(EXISTS ${LOC_PATH})
+    message(FATAL_ERROR ${OOS_MSG})
 endif()
 
 #################################################################################################
@@ -69,9 +80,6 @@ find_package(PactMatchingFfi REQUIRED CONFIG PATHS ${SEARCH_PATH})
 
 # Define the executable
 add_executable(example src/main.c)
-
-# Make sure it finds the include file
-target_include_directories(example PRIVATE ${PactMatchingFfi_INCLUDE_DIRS})
 
 # Link to pact matching FFI
 target_link_libraries(example PRIVATE PactMatchingFfi)
