@@ -4,6 +4,7 @@ use crate::ffi;
 use crate::models::pact_specification::PactSpecification;
 use crate::util::*;
 use anyhow::Context;
+use anyhow::anyhow;
 use libc::{c_char, c_int, c_uint, EXIT_FAILURE, EXIT_SUCCESS};
 use std::collections::HashMap;
 use std::ffi::CStr;
@@ -93,19 +94,17 @@ pub extern "C" fn message_from_json(
 /// This function may fail if the Rust string contains embedded
 /// null ('\0') bytes.
 #[no_mangle]
-pub extern "C" fn message_get_description(
+#[allow(clippy::missing_safety_doc)]
+#[allow(clippy::or_fun_call)]
+pub unsafe extern "C" fn message_get_description(
     message: *const Message,
 ) -> *const c_char {
     ffi! {
         name: "message_get_description",
         op: {
-            if message.is_null() {
-                anyhow::bail!("message is null");
-            }
-
-            let description = unsafe { &(*message).description };
-
-            Ok(string::into_leaked_cstring(description.clone())?)
+            let message = message.as_ref().ok_or(anyhow!("message is null"))?;
+            let description = string::into_leaked_cstring(message.description.clone())?;
+            Ok(description)
         },
         fail: {
             ptr::null_to::<c_char>()
@@ -121,23 +120,22 @@ pub extern "C" fn message_get_description(
 /// This function will only reallocate if the new string
 /// does not fit in the existing buffer.
 #[no_mangle]
-pub extern "C" fn message_set_description(
+#[allow(clippy::missing_safety_doc)]
+#[allow(clippy::or_fun_call)]
+pub unsafe extern "C" fn message_set_description(
     message: *mut Message,
     description: *const c_char,
 ) {
     ffi! {
         name: "message_set_description",
         op: {
-            if message.is_null() {
-                anyhow::bail!("message is null");
-            }
+            let message = message.as_mut().ok_or(anyhow!("message is null"))?;
 
             if description.is_null() {
                 anyhow::bail!("description is null");
             }
 
-            let message = unsafe { &mut (*message) };
-            let description = unsafe { CStr::from_ptr(description) };
+            let description = CStr::from_ptr(description);
             let description = description.to_string_lossy();
 
             // Wipe out the previous contents of the string, without
