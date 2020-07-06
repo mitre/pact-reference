@@ -1,24 +1,37 @@
 //! The Pact `Message` type, including associated matching rules and provider states.
 
+/*===============================================================================================
+ * # Imports
+ *---------------------------------------------------------------------------------------------*/
+
 use crate::ffi;
 use crate::models::pact_specification::PactSpecification;
+use crate::models::provider_state::{
+    into_leaked_provider_state, ProviderState,
+};
 use crate::util::*;
-use anyhow::Context;
-use anyhow::anyhow;
+use anyhow::{anyhow, Context};
 use libc::{c_char, c_int, c_uint, EXIT_FAILURE, EXIT_SUCCESS};
-use std::collections::HashMap;
 use std::ffi::CStr;
-use std::ffi::CString;
+
+/*===============================================================================================
+ * # Re-Exports
+ *---------------------------------------------------------------------------------------------*/
 
 // Necessary to make 'cbindgen' generate an opaque struct on the C side.
 pub use pact_matching::models::message::Message;
-pub use pact_matching::models::provider_states::ProviderState as NonCProviderState;
+
+/*===============================================================================================
+ * # FFI Functions
+ *---------------------------------------------------------------------------------------------*/
 
 /// Get a mutable pointer to a newly-created default message on the heap.
 #[no_mangle]
-pub extern "C" fn message_new() -> *mut Message {
+#[allow(clippy::missing_safety_doc)]
+pub unsafe extern "C" fn message_new() -> *mut Message {
     ffi! {
         name: "message_new",
+        params: [],
         op: {
             Ok(ptr::raw_to(Message::default()))
         },
@@ -28,9 +41,49 @@ pub extern "C" fn message_new() -> *mut Message {
     }
 }
 
+/// Constructs a `Message` from the JSON string
+#[no_mangle]
+#[allow(clippy::missing_safety_doc)]
+pub unsafe extern "C" fn message_new_from_json(
+    index: c_uint,
+    json_str: *const c_char,
+    spec_version: PactSpecification,
+) -> *mut Message {
+    ffi! {
+        name: "message_new_from_json",
+        params: [index, json_str, spec_version],
+        op: {
+            if json_str.is_null() {
+                anyhow::bail!("json_str is null");
+            }
+
+            let json_str = CStr::from_ptr(json_str);
+            let json_str = json_str
+                .to_str()
+                .context("error parsing json_str as UTF-8")?;
+
+            let json_value: serde_json::Value =
+                serde_json::from_str(json_str)
+                .context("error parsing json_str as JSON")?;
+
+            let message = Message::from_json(
+                index as usize,
+                &json_value,
+                &spec_version.into())
+                .map_err(|e| anyhow::anyhow!("{}", e))?;
+
+            Ok(ptr::raw_to(message))
+        },
+        fail: {
+            ptr::null_mut_to::<Message>()
+        }
+    }
+}
+
 /// Destroy the `Message` being pointed to.
 #[no_mangle]
-pub extern "C" fn message_delete(message: *mut Message) -> c_int {
+#[allow(clippy::missing_safety_doc)]
+pub unsafe extern "C" fn message_delete(message: *mut Message) -> c_int {
     ffi! {
         name: "message_delete",
         params: [message],
@@ -40,43 +93,6 @@ pub extern "C" fn message_delete(message: *mut Message) -> c_int {
         },
         fail: {
             EXIT_FAILURE
-        }
-    }
-}
-
-/// Constructs a `Message` from the JSON string
-#[no_mangle]
-pub extern "C" fn message_from_json(
-    index: c_uint,
-    json_str: *const c_char,
-    spec_version: PactSpecification,
-) -> *mut Message {
-    ffi! {
-        name: "message_from_json",
-        op: {
-            if json_str.is_null() {
-                anyhow::bail!("json_str is null");
-            }
-
-            let json_str = unsafe { CStr::from_ptr(json_str) };
-            let json_str = json_str
-                .to_str()
-                .context("Error parsing json_str as UTF-8")?;
-
-            let json_value: serde_json::Value =
-                serde_json::from_str(json_str)
-                .context("Error parsing json_str as JSON")?;
-
-            let message = Message::from_json(
-                index as usize,
-                &json_value,
-                &spec_version.into())
-                .map_err(|e| anyhow::anyhow!("Pact error: {}", e))?;
-
-            Ok(ptr::raw_to(message))
-        },
-        fail: {
-            ptr::null_mut_to::<Message>()
         }
     }
 }
@@ -101,6 +117,7 @@ pub unsafe extern "C" fn message_get_description(
 ) -> *const c_char {
     ffi! {
         name: "message_get_description",
+        params: [message],
         op: {
             let message = message.as_ref().ok_or(anyhow!("message is null"))?;
             let description = string::into_leaked_cstring(message.description.clone())?;
@@ -125,9 +142,10 @@ pub unsafe extern "C" fn message_get_description(
 pub unsafe extern "C" fn message_set_description(
     message: *mut Message,
     description: *const c_char,
-) {
+) -> c_int {
     ffi! {
         name: "message_set_description",
+        params: [message, description],
         op: {
             let message = message.as_mut().ok_or(anyhow!("message is null"))?;
 
@@ -136,149 +154,26 @@ pub unsafe extern "C" fn message_set_description(
             }
 
             let description = CStr::from_ptr(description);
-            let description = description.to_string_lossy();
+
+            // Get an owned Rust `String` from `description`.
+            let description = description.to_str()
+                                         .map_err(|e| {
+                                             let last_valid_byte = e.valid_up_to();
+                                             anyhow!("description isn't valid UTF-8 (valid up to byte {})", last_valid_byte)
+                                         })?
+                                         .to_owned();
 
             // Wipe out the previous contents of the string, without
-            // deallocating.
+            // deallocating, and set the new description.
             message.description.clear();
-
             message.description.push_str(&description);
-            Ok(())
+
+            Ok(EXIT_SUCCESS)
         },
         fail: {
+            EXIT_FAILURE
         }
     }
-}
-
-/// FFI structure mirroring the internal Rust ProviderState struct.
-/// Contains the name of this Provider State,
-/// and a list of (key, value) parameters as an array of structures.
-/// The number of elements is stored in 'params_length'.
-///
-/// This structure should not be mutated.
-#[allow(missing_copy_implementations)]
-#[repr(C)]
-#[derive(Debug)]
-pub struct ProviderState {
-    /// null terminated string containing the name
-    pub name: *const c_char,
-    /// pointer to array of key, value pairs
-    pub params_list: *const ProviderStateParamsKV,
-    /// number of elements in `params_list`
-    pub params_length: usize,
-    /// private, tracks allocated capacity of the underlying Vec
-    capacity: usize,
-}
-
-/// FFI structure representing a (key, value) pair
-/// for the ProviderState parameters.
-///
-/// The `value` field is a JSON object, serialized to a string.
-///
-/// This structure should not be mutated.
-#[allow(missing_copy_implementations)]
-#[repr(C)]
-#[derive(Debug)]
-pub struct ProviderStateParamsKV {
-    /// null terminated string containing the key
-    pub key: *const c_char,
-    /// null terminated JSON string
-    pub value: *const c_char,
-}
-
-/// Create and leak a ProviderState.  Must be passed back to
-/// impl_provider_state_delete to clean up memory.
-fn into_leaked_provider_state(
-    provider_state: &NonCProviderState,
-) -> Result<*const ProviderState, anyhow::Error> {
-    let name = &provider_state.name;
-    let params = &provider_state.params;
-    let mut list = Vec::with_capacity(params.len());
-
-    // First check all the strings for embedded null.
-    // This prevents leaking memory in the case where
-    // an error occurs after some strings were intentionally
-    // leaked, but before they can be passed to C.
-
-    if name.find(|c| c == '\0').is_some() {
-        anyhow::bail!(
-            "Found embedded null in \
-                      a provider state name: '{}'",
-            name
-        );
-    }
-
-    for (k, _v) in params.iter() {
-        if k.find(|c| c == '\0').is_some() {
-            anyhow::bail!(
-                "Found embedded null in \
-                          a provider state key name: '{}'",
-                k
-            );
-        }
-    }
-
-    for (k, v) in params.iter() {
-        // It is safe to unwrap, since the strings were already
-        // checked for embedded nulls.
-        let kv = ProviderStateParamsKV {
-            key: string::into_leaked_cstring(k.clone()).unwrap(),
-            value: string::into_leaked_cstring(v.to_string()).unwrap(),
-        };
-
-        list.push(kv);
-    }
-
-    let provider_state_ffi = ProviderState {
-        // It is safe to unwrap, since the string was already
-        // checked for embedded nulls.
-        name: string::into_leaked_cstring(name.clone()).unwrap(),
-        params_list: list.as_ptr(),
-        params_length: list.len(),
-        capacity: list.capacity(),
-    };
-
-    std::mem::forget(list);
-
-    let output = Box::new(provider_state_ffi);
-
-    Ok(Box::into_raw(output))
-}
-
-/// Manually delete a ProviderState.
-/// Returns all leaked memory into Rust structures, which will
-/// be automatically cleaned up on Drop.
-fn impl_provider_state_delete(ptr: *const ProviderState) {
-    let provider_state =
-        unsafe { Box::from_raw(ptr as *mut ProviderState) };
-
-    let _name =
-        unsafe { CString::from_raw(provider_state.name as *mut c_char) };
-
-    let list = unsafe {
-        Vec::from_raw_parts(
-            provider_state.params_list as *mut ProviderStateParamsKV,
-            provider_state.params_length,
-            provider_state.capacity,
-        )
-    };
-
-    for kv in list {
-        let _k = unsafe { CString::from_raw(kv.key as *mut c_char) };
-        let _v = unsafe { CString::from_raw(kv.value as *mut c_char) };
-    }
-}
-
-/// The result of calling message_get_provider_state
-#[repr(C)]
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum GetProviderStateResult {
-    /// Success
-    Success,
-    /// The requested index was out of bounds
-    IndexOutOfBounds,
-    /// Some other error occured; check error messages
-    OtherError,
 }
 
 /// Get a copy of the provider state at the given index from this message.
@@ -297,212 +192,27 @@ pub enum GetProviderStateResult {
 /// This function may fail if the index requested is out of bounds,
 /// or if any of the Rust strings contain embedded null ('\0') bytes.
 #[no_mangle]
-pub extern "C" fn message_get_provider_state(
+#[allow(clippy::missing_safety_doc)]
+#[allow(clippy::or_fun_call)]
+pub unsafe extern "C" fn message_get_provider_state(
     message: *const Message,
     index: usize,
     out_provider_state: *mut *const ProviderState,
-) -> GetProviderStateResult {
-    use GetProviderStateResult::*;
+) -> c_int {
     ffi! {
         name: "message_get_provider_state",
+        params: [message, index, out_provider_state],
         op: {
-            if message.is_null() {
-                anyhow::bail!("message is null");
-            }
+            let message = message.as_ref().ok_or(anyhow!("message is null"))?;
 
-            let message = unsafe { &(*message) };
+            let provider_state = message.provider_states.get(index).ok_or(anyhow!("index is out of bounds"))?;
 
-            match message.provider_states.get(index) {
-                None => {
-                    Ok(IndexOutOfBounds)
-                }
-                Some(provider_state) => {
-                    unsafe { std::ptr::write(
-                        out_provider_state,
-                        into_leaked_provider_state(provider_state)?) };
+            std::ptr::write(out_provider_state, into_leaked_provider_state(provider_state)?);
 
-                    Ok(Success)
-                }
-            }
+            Ok(EXIT_SUCCESS)
         },
         fail: {
-            OtherError
-        }
-    }
-}
-
-/// Delete a ProviderState previously returned by this FFI.
-///
-/// It is explicitly allowed to pass a null pointer to this function;
-/// in that case the function will do nothing.
-#[no_mangle]
-pub extern "C" fn provider_state_delete(
-    provider_state: *const ProviderState,
-) {
-    ffi! {
-        name: "provider_state_delete",
-        op: {
-            if provider_state.is_null() {
-                return Ok(());
-            }
-
-            impl_provider_state_delete(provider_state);
-            Ok(())
-        },
-        fail: {
-        }
-    }
-}
-
-/// FFI structure representing a list of (key, value) pairs.
-/// It is an array with a number of elements equal to `length`.
-///
-/// This structure should not be mutated.
-#[allow(missing_copy_implementations)]
-#[repr(C)]
-#[derive(Debug)]
-pub struct MetadataList {
-    /// pointer to array of key, value pairs
-    pub list: *const MetadataKV,
-    /// number of elements in `list`
-    pub length: usize,
-    /// private, tracks allocated capacity of the underlying Vec
-    capacity: usize,
-}
-
-/// FFI structure representing a (key, value) pair.
-///
-/// This structure should not be mutated.
-#[allow(missing_copy_implementations)]
-#[repr(C)]
-#[derive(Debug)]
-pub struct MetadataKV {
-    /// null terminated string containing the key
-    pub key: *const c_char,
-    /// null terminated string containing the value
-    pub value: *const c_char,
-}
-
-/// Create and leak a MetadataList.  Must be passed back to
-/// impl_metadata_list_delete to clean up memory.
-fn into_leaked_metadata_list(
-    metadata: &HashMap<String, String>,
-) -> Result<*const MetadataList, anyhow::Error> {
-    let mut list = Vec::with_capacity(metadata.len());
-
-    // First check all the strings for embedded null.
-    // This prevents leaking memory in the case where
-    // an error occurs after some strings were intentionally
-    // leaked, but before they can be passed to C.
-    for (k, v) in metadata.iter() {
-        if k.find(|c| c == '\0').is_some()
-            || v.find(|c| c == '\0').is_some()
-        {
-            anyhow::bail!(
-                "Found embedded null in \
-                          a (key, value) pair: ('{}', '{}')",
-                k,
-                v
-            );
-        }
-    }
-
-    for (k, v) in metadata.iter() {
-        // It is safe to unwrap, since the strings were already
-        // checked for embedded nulls.
-        let kv = MetadataKV {
-            key: string::into_leaked_cstring(k.clone()).unwrap(),
-            value: string::into_leaked_cstring(v.clone()).unwrap(),
-        };
-
-        list.push(kv);
-    }
-
-    let metadata_list = MetadataList {
-        list: list.as_ptr(),
-        length: list.len(),
-        capacity: list.capacity(),
-    };
-
-    std::mem::forget(list);
-
-    let output = Box::new(metadata_list);
-
-    Ok(Box::into_raw(output))
-}
-
-/// Manually delete a MetadataList.
-/// Returns all leaked memory into Rust structures, which will
-/// be automatically cleaned up on Drop.
-fn impl_metadata_list_delete(ptr: *const MetadataList) {
-    let metadata_list =
-        unsafe { Box::from_raw(ptr as *mut MetadataList) };
-
-    let list = unsafe {
-        Vec::from_raw_parts(
-            metadata_list.list as *mut MetadataKV,
-            metadata_list.length,
-            metadata_list.capacity,
-        )
-    };
-
-    for kv in list {
-        let _k = unsafe { CString::from_raw(kv.key as *mut c_char) };
-        let _v = unsafe { CString::from_raw(kv.value as *mut c_char) };
-    }
-}
-
-/// Get a copy of the metadata list from this message.
-/// It is in the form of a list of (key, value) pairs,
-/// in an unspecified order.
-/// The returned structure must be deleted with `metadata_list_delete`.
-///
-/// Since it is a copy, the returned structure may safely outlive
-/// the `Message`.
-///
-/// # Errors
-///
-/// On failure, this function will return a NULL pointer.
-///
-/// This function may fail if any of the Rust strings contain
-/// embedded null ('\0') bytes.
-#[no_mangle]
-pub extern "C" fn message_get_metadata_list(
-    message: *const Message,
-) -> *const MetadataList {
-    ffi! {
-        name: "message_metadata_list",
-        op: {
-            if message.is_null() {
-                anyhow::bail!("message is null");
-            }
-
-            let message = unsafe { &(*message) };
-            into_leaked_metadata_list(&message.metadata)
-        },
-        fail: {
-            ptr::null_to::<MetadataList>()
-        }
-    }
-}
-
-/// Delete a MetadataList previously returned by this FFI.
-///
-/// It is explicitly allowed to pass a null pointer to this function;
-/// in that case the function will do nothing.
-#[no_mangle]
-pub extern "C" fn metadata_list_delete(list: *const MetadataList) {
-    ffi! {
-        name: "metadata_list_delete",
-        op: {
-            if list.is_null() {
-                return Ok(());
-            }
-
-            impl_metadata_list_delete(list);
-            Ok(())
-        },
-        fail: {
+            EXIT_FAILURE
         }
     }
 }
@@ -524,26 +234,26 @@ pub extern "C" fn metadata_list_delete(list: *const MetadataList) {
 /// invalid UTF-8, or if the Rust string contains embedded null ('\0')
 /// bytes.
 #[no_mangle]
-pub extern "C" fn message_metadata_get(
+#[allow(clippy::missing_safety_doc)]
+#[allow(clippy::or_fun_call)]
+pub unsafe extern "C" fn message_find_metadata(
     message: *const Message,
     key: *const c_char,
 ) -> *const c_char {
     ffi! {
-        name: "message_metadata_get",
+        name: "message_find_metadata",
+        params: [message, key],
         op: {
-            if message.is_null() {
-                anyhow::bail!("message is null");
-            }
+            let message = message.as_ref().ok_or(anyhow!("message is null"))?;
 
             if key.is_null() {
                 anyhow::bail!("key is null");
             }
 
-            let message = unsafe { &(*message) };
-            let key = unsafe { CStr::from_ptr(key) };
+            let key = CStr::from_ptr(key);
             let key = key
                 .to_str()
-                .context("Error parsing key as UTF-8")?;
+                .context("error parsing key as UTF-8")?;
 
             match message.metadata.get(key) {
                 None => Ok(ptr::null_to::<c_char>()),
@@ -558,40 +268,30 @@ pub extern "C" fn message_metadata_get(
     }
 }
 
-/// Result from an attempt to insert into a HashMap
-#[repr(C)]
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum HashMapInsertResult {
-    /// The value was inserted, and the key was unset
-    SuccessNew,
-    /// The value was inserted, and the key was previously set
-    SuccessOverwrite,
-    /// An error occured, and the value was not inserted
-    Error,
-}
-
 /// Insert the (`key`, `value`) pair into this Message's
 /// `metadata` HashMap.
 /// This function returns an enum indicating the result;
-/// see the comments on HashMapInsertResult for details.
+/// see the comments on HashMapInsertStatus for details.
 ///
 /// # Errors
 ///
 /// This function may fail if the provided `key` or `value` strings
 /// contain invalid UTF-8.
 #[no_mangle]
-pub extern "C" fn message_metadata_insert(
+#[allow(clippy::missing_safety_doc)]
+#[allow(clippy::or_fun_call)]
+pub unsafe extern "C" fn message_insert_metadata(
     message: *mut Message,
     key: *const c_char,
     value: *const c_char,
-) -> HashMapInsertResult {
-    use HashMapInsertResult::*;
+) -> c_int {
+    use HashMapInsertStatus as Status;
+
     ffi! {
-        name: "message_metadata_insert",
+        name: "message_insert_metadata",
+        params: [message, key, value],
         op: {
-            if message.is_null() {
-                anyhow::bail!("message is null");
-            }
+            let message = message.as_mut().ok_or(anyhow!("message is null"))?;
 
             if key.is_null() {
                 anyhow::bail!("key is null");
@@ -601,46 +301,37 @@ pub extern "C" fn message_metadata_insert(
                 anyhow::bail!("value is null");
             }
 
-            let message = unsafe { &mut (*message) };
-            let key = unsafe { CStr::from_ptr(key) };
+            let key = CStr::from_ptr(key);
             let key = key
                 .to_str()
-                .context("Error parsing key as UTF-8")?;
+                .context("error parsing key as UTF-8")?;
 
-            let value = unsafe { CStr::from_ptr(value) };
+            let value = CStr::from_ptr(value);
             let value = value
                 .to_str()
-                .context("Error parsing value as UTF-8")?;
+                .context("error parsing value as UTF-8")?;
 
             match message.metadata.insert(key.to_string(), value.to_string()) {
-                None => Ok(SuccessNew),
-                Some(_) => Ok(SuccessOverwrite),
+                None => Ok(Status::SuccessNew as c_int),
+                Some(_) => Ok(Status::SuccessOverwrite as c_int),
             }
         },
         fail: {
-            Error
+            Status::Error as c_int
         }
     }
 }
 
-/// Delete a string previously returned by this FFI.
-///
-/// It is explicitly allowed to pass a null pointer to this function;
-/// in that case the function will do nothing.
-#[no_mangle]
-pub extern "C" fn string_delete(string: *mut c_char) {
-    ffi! {
-        name: "string_delete",
-        op: {
-            if string.is_null() {
-                return Ok(());
-            }
+/*===============================================================================================
+ * # Status Types
+ *---------------------------------------------------------------------------------------------*/
 
-            let string = unsafe { CString::from_raw(string) };
-            std::mem::drop(string);
-            Ok(())
-        },
-        fail: {
-        }
-    }
+/// Result from an attempt to insert into a HashMap
+enum HashMapInsertStatus {
+    /// The value was inserted, and the key was unset
+    SuccessNew = 0,
+    /// The value was inserted, and the key was previously set
+    SuccessOverwrite = -1,
+    /// An error occured, and the value was not inserted
+    Error = -2,
 }
