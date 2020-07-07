@@ -5,9 +5,6 @@
  *---------------------------------------------------------------------------------------------*/
 
 use crate::models::pact_specification::PactSpecification;
-use crate::models::provider_state::{
-    into_leaked_provider_state, ProviderState,
-};
 use crate::util::*;
 use crate::{as_mut, as_ref, cstr, ffi, safe_str};
 use anyhow::{anyhow, Context};
@@ -19,6 +16,7 @@ use libc::{c_char, c_int, c_uint, EXIT_FAILURE, EXIT_SUCCESS};
 
 // Necessary to make 'cbindgen' generate an opaque struct on the C side.
 pub use pact_matching::models::message::Message;
+pub use pact_matching::models::provider_states::ProviderState;
 
 /*===============================================================================================
  * # FFI Functions
@@ -176,22 +174,23 @@ pub unsafe extern "C" fn message_set_description(
 pub unsafe extern "C" fn message_get_provider_state(
     message: *const Message,
     index: usize,
-    out_provider_state: *mut *const ProviderState,
-) -> c_int {
+) -> *const ProviderState {
     ffi! {
         name: "message_get_provider_state",
-        params: [message, index, out_provider_state],
+        params: [message, index],
         op: {
             let message = as_ref!(message);
-
-            let provider_state = message.provider_states.get(index).ok_or(anyhow!("index is out of bounds"))?;
-
-            std::ptr::write(out_provider_state, into_leaked_provider_state(provider_state)?);
-
-            Ok(EXIT_SUCCESS)
+            // Get a raw pointer directly, rather than boxing it, as its owned by the `Message`
+            // and will be cleaned up when the `Message` is cleaned up.
+            let provider_state = message
+                .provider_states
+                .get(index)
+                .ok_or(anyhow!("index is out of bounds"))?
+                as *const ProviderState;
+            Ok(provider_state)
         },
         fail: {
-            EXIT_FAILURE
+            ptr::null_to::<ProviderState>()
         }
     }
 }
