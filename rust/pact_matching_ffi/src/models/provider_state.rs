@@ -104,8 +104,8 @@ pub(crate) fn into_leaked_provider_state(
         // It is safe to unwrap, since the strings were already
         // checked for embedded nulls.
         let kv = ProviderStateParamsKV {
-            key: string::into_leaked_cstring(k.clone()).unwrap(),
-            value: string::into_leaked_cstring(v.to_string()).unwrap(),
+            key: string::into_leaked_cstring(k.as_ref()).unwrap(),
+            value: string::into_leaked_cstring(&v.to_string()).unwrap(),
         };
 
         list.push(kv);
@@ -114,7 +114,7 @@ pub(crate) fn into_leaked_provider_state(
     let provider_state_ffi = ProviderState {
         // It is safe to unwrap, since the string was already
         // checked for embedded nulls.
-        name: string::into_leaked_cstring(name.clone()).unwrap(),
+        name: string::into_leaked_cstring(name.as_ref()).unwrap(),
         params_list: list.as_ptr(),
         params_length: list.len(),
         capacity: list.capacity(),

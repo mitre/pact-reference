@@ -8,12 +8,9 @@ use std::mem;
 ///
 /// The returned pointer must be passed to CString::from_raw to
 /// prevent leaking memory.
-pub(crate) fn into_leaked_cstring<T>(
-    t: T,
-) -> Result<*const c_char, anyhow::Error>
-where
-    T: Into<Vec<u8>>,
-{
+pub(crate) fn into_leaked_cstring(
+    t: &str,
+) -> anyhow::Result<*const c_char> {
     let copy = CString::new(t)?;
     let ptr = copy.as_ptr();
 
@@ -45,4 +42,30 @@ pub extern "C" fn string_delete(string: *mut c_char) {
         fail: {
         }
     }
+}
+
+/// Construct a CStr safely with null checks.
+#[macro_export]
+macro_rules! cstr {
+    ( $name:ident ) => {{
+        use std::ffi::CStr;
+
+        if $name.is_null() {
+            anyhow::bail!(concat!(stringify!($name), " is null"));
+        }
+
+        CStr::from_ptr($name)
+    }};
+}
+
+/// Construct a `&str` safely with null checks.
+#[macro_export]
+macro_rules! safe_str {
+    ( $name:ident ) => {{
+        cstr!($name).to_str().context(concat!(
+            "error parsing ",
+            stringify!($name),
+            " as UTF-8"
+        ))?
+    }};
 }

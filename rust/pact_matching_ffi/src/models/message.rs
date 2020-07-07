@@ -4,15 +4,14 @@
  * # Imports
  *---------------------------------------------------------------------------------------------*/
 
-use crate::ffi;
 use crate::models::pact_specification::PactSpecification;
 use crate::models::provider_state::{
     into_leaked_provider_state, ProviderState,
 };
 use crate::util::*;
+use crate::{as_mut, as_ref, cstr, ffi, safe_str};
 use anyhow::{anyhow, Context};
 use libc::{c_char, c_int, c_uint, EXIT_FAILURE, EXIT_SUCCESS};
-use std::ffi::CStr;
 
 /*===============================================================================================
  * # Re-Exports
@@ -53,14 +52,7 @@ pub unsafe extern "C" fn message_new_from_json(
         name: "message_new_from_json",
         params: [index, json_str, spec_version],
         op: {
-            if json_str.is_null() {
-                anyhow::bail!("json_str is null");
-            }
-
-            let json_str = CStr::from_ptr(json_str);
-            let json_str = json_str
-                .to_str()
-                .context("error parsing json_str as UTF-8")?;
+            let json_str = safe_str!(json_str);
 
             let json_value: serde_json::Value =
                 serde_json::from_str(json_str)
@@ -119,8 +111,8 @@ pub unsafe extern "C" fn message_get_description(
         name: "message_get_description",
         params: [message],
         op: {
-            let message = message.as_ref().ok_or(anyhow!("message is null"))?;
-            let description = string::into_leaked_cstring(message.description.clone())?;
+            let message = as_ref!(message);
+            let description = string::into_leaked_cstring(&message.description)?;
             Ok(description)
         },
         fail: {
@@ -147,26 +139,13 @@ pub unsafe extern "C" fn message_set_description(
         name: "message_set_description",
         params: [message, description],
         op: {
-            let message = message.as_mut().ok_or(anyhow!("message is null"))?;
-
-            if description.is_null() {
-                anyhow::bail!("description is null");
-            }
-
-            let description = CStr::from_ptr(description);
-
-            // Get an owned Rust `String` from `description`.
-            let description = description.to_str()
-                                         .map_err(|e| {
-                                             let last_valid_byte = e.valid_up_to();
-                                             anyhow!("description isn't valid UTF-8 (valid up to byte {})", last_valid_byte)
-                                         })?
-                                         .to_owned();
+            let message = as_mut!(message);
+            let description = safe_str!(description);
 
             // Wipe out the previous contents of the string, without
             // deallocating, and set the new description.
             message.description.clear();
-            message.description.push_str(&description);
+            message.description.push_str(description);
 
             Ok(EXIT_SUCCESS)
         },
@@ -203,7 +182,7 @@ pub unsafe extern "C" fn message_get_provider_state(
         name: "message_get_provider_state",
         params: [message, index, out_provider_state],
         op: {
-            let message = message.as_ref().ok_or(anyhow!("message is null"))?;
+            let message = as_ref!(message);
 
             let provider_state = message.provider_states.get(index).ok_or(anyhow!("index is out of bounds"))?;
 
@@ -244,21 +223,13 @@ pub unsafe extern "C" fn message_find_metadata(
         name: "message_find_metadata",
         params: [message, key],
         op: {
-            let message = message.as_ref().ok_or(anyhow!("message is null"))?;
-
-            if key.is_null() {
-                anyhow::bail!("key is null");
-            }
-
-            let key = CStr::from_ptr(key);
-            let key = key
-                .to_str()
-                .context("error parsing key as UTF-8")?;
+            let message = as_ref!(message);
+            let key = safe_str!(key);
 
             match message.metadata.get(key) {
                 None => Ok(ptr::null_to::<c_char>()),
                 Some(value) => {
-                    Ok(string::into_leaked_cstring(value.clone())?)
+                    Ok(string::into_leaked_cstring(value)?)
                 },
             }
         },
@@ -291,25 +262,9 @@ pub unsafe extern "C" fn message_insert_metadata(
         name: "message_insert_metadata",
         params: [message, key, value],
         op: {
-            let message = message.as_mut().ok_or(anyhow!("message is null"))?;
-
-            if key.is_null() {
-                anyhow::bail!("key is null");
-            }
-
-            if value.is_null() {
-                anyhow::bail!("value is null");
-            }
-
-            let key = CStr::from_ptr(key);
-            let key = key
-                .to_str()
-                .context("error parsing key as UTF-8")?;
-
-            let value = CStr::from_ptr(value);
-            let value = value
-                .to_str()
-                .context("error parsing value as UTF-8")?;
+            let message = as_mut!(message);
+            let key = safe_str!(key);
+            let value = safe_str!(value);
 
             match message.metadata.insert(key.to_string(), value.to_string()) {
                 None => Ok(Status::SuccessNew as c_int),

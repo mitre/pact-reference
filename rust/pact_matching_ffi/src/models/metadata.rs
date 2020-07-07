@@ -65,8 +65,8 @@ fn into_leaked_metadata_list(
         // It is safe to unwrap, since the strings were already
         // checked for embedded nulls.
         let kv = MetadataKV {
-            key: string::into_leaked_cstring(k.clone()).unwrap(),
-            value: string::into_leaked_cstring(v.clone()).unwrap(),
+            key: string::into_leaked_cstring(k.as_ref()).unwrap(),
+            value: string::into_leaked_cstring(v.as_ref()).unwrap(),
         };
 
         list.push(kv);
