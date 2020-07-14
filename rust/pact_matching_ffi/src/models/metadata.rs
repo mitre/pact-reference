@@ -1,8 +1,7 @@
 //! The `Metadata` type and operations on it.
 
+/*
 use crate::ffi;
-use crate::models::message::Message;
-use crate::util::ptr;
 use crate::util::string;
 use libc::c_char;
 use std::collections::HashMap;
@@ -127,3 +126,4 @@ pub extern "C" fn metadata_list_delete(list: *const MetadataList) {
         }
     }
 }
+*/
