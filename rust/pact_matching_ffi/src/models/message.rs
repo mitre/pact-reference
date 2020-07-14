@@ -276,6 +276,42 @@ pub unsafe extern "C" fn message_insert_metadata(
     }
 }
 
+/*
+/// Get a copy of the metadata list from this message.
+/// It is in the form of a list of (key, value) pairs,
+/// in an unspecified order.
+/// The returned structure must be deleted with `metadata_list_delete`.
+///
+/// Since it is a copy, the returned structure may safely outlive
+/// the `Message`.
+///
+/// # Errors
+///
+/// On failure, this function will return a NULL pointer.
+///
+/// This function may fail if any of the Rust strings contain
+/// embedded null ('\0') bytes.
+#[no_mangle]
+#[allow(clippy::missing_safety_doc)]
+#[allow(clippy::or_fun_call)]
+pub unsafe extern "C" fn message_get_metadata_list(
+    message: *mut Message,
+) -> *mut MetadataIterator {
+    ffi! {
+        name: "message_get_metadata_list",
+        params: [message],
+        op: {
+            let message = as_mut!(message);
+
+            todo!()
+        },
+        fail: {
+            ptr::null_to::<MetadataIterator>()
+        }
+    }
+}
+*/
+
 /*===============================================================================================
  * # Status Types
  *---------------------------------------------------------------------------------------------*/

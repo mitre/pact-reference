@@ -106,41 +106,6 @@ fn impl_metadata_list_delete(ptr: *const MetadataList) {
     }
 }
 
-/// Get a copy of the metadata list from this message.
-/// It is in the form of a list of (key, value) pairs,
-/// in an unspecified order.
-/// The returned structure must be deleted with `metadata_list_delete`.
-///
-/// Since it is a copy, the returned structure may safely outlive
-/// the `Message`.
-///
-/// # Errors
-///
-/// On failure, this function will return a NULL pointer.
-///
-/// This function may fail if any of the Rust strings contain
-/// embedded null ('\0') bytes.
-#[no_mangle]
-pub extern "C" fn message_get_metadata_list(
-    message: *const Message,
-) -> *const MetadataList {
-    ffi! {
-        name: "message_get_metadata_list",
-        params: [message],
-        op: {
-            if message.is_null() {
-                anyhow::bail!("message is null");
-            }
-
-            let message = unsafe { &(*message) };
-            into_leaked_metadata_list(&message.metadata)
-        },
-        fail: {
-            ptr::null_to::<MetadataList>()
-        }
-    }
-}
-
 /// Delete a MetadataList previously returned by this FFI.
 ///
 /// It is explicitly allowed to pass a null pointer to this function;
