@@ -222,15 +222,14 @@ pub unsafe extern "C" fn message_find_metadata(
         name: "message_find_metadata",
         params: [message, key],
         op: {
+            // Reconstitute the message.
             let message = as_ref!(message);
+            // Safely get a Rust String out of the key.
             let key = safe_str!(key);
-
-            match message.metadata.get(key) {
-                None => Ok(ptr::null_to::<c_char>()),
-                Some(value) => {
-                    Ok(string::into_leaked_cstring(value)?)
-                },
-            }
+            // Get the value, if present, for that key.
+            let value = message.metadata.get(key).ok_or(anyhow::anyhow!("invalid metadata key"))?;
+            // Leak the string to the C-side.
+            Ok(string::into_leaked_cstring(value)?)
         },
         fail: {
             ptr::null_to::<c_char>()
@@ -276,7 +275,6 @@ pub unsafe extern "C" fn message_insert_metadata(
     }
 }
 
-/*
 /// Get a copy of the metadata list from this message.
 /// It is in the form of a list of (key, value) pairs,
 /// in an unspecified order.
@@ -294,23 +292,140 @@ pub unsafe extern "C" fn message_insert_metadata(
 #[no_mangle]
 #[allow(clippy::missing_safety_doc)]
 #[allow(clippy::or_fun_call)]
-pub unsafe extern "C" fn message_get_metadata_list(
+pub unsafe extern "C" fn message_get_metadata_iter(
     message: *mut Message,
 ) -> *mut MetadataIterator {
     ffi! {
-        name: "message_get_metadata_list",
+        name: "message_get_metadata_iter",
         params: [message],
         op: {
             let message = as_mut!(message);
 
-            todo!()
+            let iter = MetadataIterator {
+                keys:  message.metadata.keys().cloned().collect(),
+                current: 0,
+                message: message as *const Message,
+            };
+
+            Ok(ptr::raw_to(iter))
         },
         fail: {
-            ptr::null_to::<MetadataIterator>()
+            ptr::null_mut_to::<MetadataIterator>()
         }
     }
 }
-*/
+
+/// Get the next key and value out of the iterator, if possible
+///
+/// Returns a pointer to a heap allocated array of 2 elements, the pointer to the
+/// key string on the heap, and the pointer to the value string on the heap.
+///
+/// The user needs to free both the contained strings and the array.
+#[no_mangle]
+pub unsafe extern "C" fn metadata_iter_next(
+    iter: *mut MetadataIterator,
+) -> *mut MetadataPair {
+    ffi! {
+        name: "metadata_iter_next",
+        params: [iter],
+        op: {
+            // Reconstitute the iterator.
+            let iter = as_mut!(iter);
+
+            // Reconstitute the message.
+            let message = as_ref!(iter.message);
+
+            // Get the current key from the iterator.
+            let key = iter.next().ok_or(anyhow::anyhow!("iter past the end of metadata"))?;
+
+            // Get the value for the current key.
+            let (key, value) = message.metadata.get_key_value(key).ok_or(anyhow::anyhow!("iter provided invalid metadata key"))?;
+
+            // Package up for return.
+            let pair = MetadataPair::new(key, value)?;
+
+            // Leak the value out to the C-side.
+            Ok(ptr::raw_to(pair))
+        },
+        fail: {
+            ptr::null_mut_to::<MetadataPair>()
+        }
+    }
+}
+
+/// Free the metadata iterator when you're done using it.
+#[no_mangle]
+pub unsafe extern "C" fn metadata_iter_delete(
+    iter: *mut MetadataIterator,
+) -> c_int {
+    ffi! {
+        name: "metadata_iter_delete",
+        params: [iter],
+        op: {
+            ptr::drop_raw(iter);
+            Ok(EXIT_SUCCESS)
+        },
+        fail: {
+            EXIT_FAILURE
+        }
+    }
+}
+
+/// Free a pair of key and value returned from `message_next_metadata_iter`.
+#[no_mangle]
+pub unsafe extern "C" fn metadata_pair_delete(pair: *mut MetadataPair) -> c_int {
+    ffi! {
+        name: "metadata_pair_delete",
+        params: [pair],
+        op: {
+            ptr::drop_raw(pair);
+            Ok(EXIT_SUCCESS)
+        },
+        fail: {
+            EXIT_FAILURE
+        }
+    }
+}
+
+/// An iterator that enables FFI iteration over metadata by putting all the keys on the heap
+/// and tracking which one we're currently at.
+///
+/// This assumes no mutation of the underlying metadata happens while the iterator is live.
+#[derive(Debug)]
+pub struct MetadataIterator {
+    /// The metadata keys
+    keys: Vec<String>,
+    /// The current key
+    current: usize,
+    /// Pointer to the message.
+    message: *const Message,
+}
+
+impl MetadataIterator {
+    fn next(&mut self) -> Option<&String> {
+        let idx = self.current;
+        self.current += 1;
+        self.keys.get(idx)
+    }
+}
+
+/// A single key-value pair exported to the C-side.
+#[derive(Debug)]
+#[repr(C)]
+#[allow(missing_copy_implementations)]
+pub struct MetadataPair {
+    key: *const c_char,
+    value: *const c_char,
+}
+
+impl MetadataPair {
+    fn new(key: &str, value: &str) -> Result<MetadataPair, anyhow::Error> {
+        Ok(MetadataPair {
+            key: string::into_leaked_cstring(key)?,
+            value: string::into_leaked_cstring(value)?
+        })
+    }
+}
 
 /*===============================================================================================
  * # Status Types
