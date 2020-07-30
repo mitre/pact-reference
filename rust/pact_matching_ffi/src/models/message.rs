@@ -275,13 +275,14 @@ pub unsafe extern "C" fn message_insert_metadata(
     }
 }
 
-/// Get a copy of the metadata list from this message.
-/// It is in the form of a list of (key, value) pairs,
-/// in an unspecified order.
-/// The returned structure must be deleted with `metadata_list_delete`.
+
+/// Get an iterator over the metadata of a message.
 ///
-/// Since it is a copy, the returned structure may safely outlive
-/// the `Message`.
+/// This iterator carries a pointer to the message, and must
+/// not outlive the message.
+///
+/// The message metadata also must not be modified during iteration. If it is,
+/// the old iterator must be deleted and a new iterator created.
 ///
 /// # Errors
 ///
