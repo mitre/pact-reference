@@ -9,6 +9,7 @@ use crate::util::*;
 use crate::{as_mut, as_ref, cstr, ffi, safe_str};
 use anyhow::{anyhow, Context};
 use libc::{c_char, c_int, c_uint, EXIT_FAILURE, EXIT_SUCCESS};
+use std::ops::Drop;
 
 /*===============================================================================================
  * # Re-Exports
@@ -104,7 +105,7 @@ pub unsafe extern "C" fn message_delete(message: *mut Message) -> c_int {
 #[allow(clippy::or_fun_call)]
 pub unsafe extern "C" fn message_get_description(
     message: *const Message,
-) -> *const c_char {
+) -> *mut c_char {
     ffi! {
         name: "message_get_description",
         params: [message],
@@ -114,7 +115,7 @@ pub unsafe extern "C" fn message_get_description(
             Ok(description)
         },
         fail: {
-            ptr::null_to::<c_char>()
+            ptr::null_mut_to::<c_char>()
         }
     }
 }
@@ -232,7 +233,7 @@ pub unsafe extern "C" fn message_find_metadata(
             Ok(string::into_leaked_cstring(value)?)
         },
         fail: {
-            ptr::null_to::<c_char>()
+            ptr::null_mut_to::<c_char>()
         }
     }
 }
@@ -274,7 +275,6 @@ pub unsafe extern "C" fn message_insert_metadata(
         }
     }
 }
-
 
 /// Get an iterator over the metadata of a message.
 ///
@@ -323,6 +323,8 @@ pub unsafe extern "C" fn message_get_metadata_iter(
 ///
 /// The user needs to free both the contained strings and the array.
 #[no_mangle]
+#[allow(clippy::missing_safety_doc)]
+#[allow(clippy::or_fun_call)]
 pub unsafe extern "C" fn metadata_iter_next(
     iter: *mut MetadataIterator,
 ) -> *mut MetadataPair {
@@ -356,6 +358,7 @@ pub unsafe extern "C" fn metadata_iter_next(
 
 /// Free the metadata iterator when you're done using it.
 #[no_mangle]
+#[allow(clippy::missing_safety_doc)]
 pub unsafe extern "C" fn metadata_iter_delete(
     iter: *mut MetadataIterator,
 ) -> c_int {
@@ -374,7 +377,10 @@ pub unsafe extern "C" fn metadata_iter_delete(
 
 /// Free a pair of key and value returned from `message_next_metadata_iter`.
 #[no_mangle]
-pub unsafe extern "C" fn metadata_pair_delete(pair: *mut MetadataPair) -> c_int {
+#[allow(clippy::missing_safety_doc)]
+pub unsafe extern "C" fn metadata_pair_delete(
+    pair: *mut MetadataPair,
+) -> c_int {
     ffi! {
         name: "metadata_pair_delete",
         params: [pair],
@@ -415,16 +421,27 @@ impl MetadataIterator {
 #[repr(C)]
 #[allow(missing_copy_implementations)]
 pub struct MetadataPair {
-    key: *const c_char,
-    value: *const c_char,
+    key: *mut c_char,
+    value: *mut c_char,
 }
 
 impl MetadataPair {
-    fn new(key: &str, value: &str) -> Result<MetadataPair, anyhow::Error> {
+    fn new(
+        key: &str,
+        value: &str,
+    ) -> Result<MetadataPair, anyhow::Error> {
         Ok(MetadataPair {
             key: string::into_leaked_cstring(key)?,
-            value: string::into_leaked_cstring(value)?
+            value: string::into_leaked_cstring(value)?,
         })
+    }
+}
+
+// Ensure that the owned strings are freed when the pair is dropped.
+impl Drop for MetadataPair {
+    fn drop(&mut self) {
+        string::string_delete(self.key);
+        string::string_delete(self.value);
     }
 }
 
