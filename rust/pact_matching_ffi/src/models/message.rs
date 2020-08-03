@@ -105,17 +105,16 @@ pub unsafe extern "C" fn message_delete(message: *mut Message) -> c_int {
 #[allow(clippy::or_fun_call)]
 pub unsafe extern "C" fn message_get_description(
     message: *const Message,
-) -> *mut c_char {
+) -> *const c_char {
     ffi! {
         name: "message_get_description",
         params: [message],
         op: {
             let message = as_ref!(message);
-            let description = string::into_leaked_cstring(&message.description)?;
-            Ok(description)
+            Ok(string::to_c(&message.description)? as *const c_char)
         },
         fail: {
-            ptr::null_mut_to::<c_char>()
+            ptr::null_to::<c_char>()
         }
     }
 }
@@ -230,10 +229,10 @@ pub unsafe extern "C" fn message_find_metadata(
             // Get the value, if present, for that key.
             let value = message.metadata.get(key).ok_or(anyhow::anyhow!("invalid metadata key"))?;
             // Leak the string to the C-side.
-            Ok(string::into_leaked_cstring(value)?)
+            Ok(string::to_c(value)? as *const c_char)
         },
         fail: {
-            ptr::null_mut_to::<c_char>()
+            ptr::null_to::<c_char>()
         }
     }
 }
@@ -421,27 +420,35 @@ impl MetadataIterator {
 #[repr(C)]
 #[allow(missing_copy_implementations)]
 pub struct MetadataPair {
-    key: *mut c_char,
-    value: *mut c_char,
+    key: *const c_char,
+    value: *const c_char,
 }
 
 impl MetadataPair {
-    fn new(
-        key: &str,
-        value: &str,
-    ) -> Result<MetadataPair, anyhow::Error> {
+    fn new(key: &str, value: &str) -> anyhow::Result<MetadataPair> {
         Ok(MetadataPair {
-            key: string::into_leaked_cstring(key)?,
-            value: string::into_leaked_cstring(value)?,
+            key: string::to_c(key)? as *const c_char,
+            value: string::to_c(value)? as *const c_char,
         })
     }
 }
 
 // Ensure that the owned strings are freed when the pair is dropped.
+//
+// Notice that we're casting from a `*const c_char` to a `*mut c_char`.
+// This may seem wrong, but is safe so long as it doesn't violate Rust's
+// guarantees around immutable references, which this doesn't. In this case,
+// the underlying data came from `CString::into_raw` which takes ownership
+// of the `CString` and hands it off via a `*mut pointer`. We cast that pointer
+// back to `*const` to limit the C-side from doing any shenanigans, since the
+// pointed-to values live inside of the `Message` metadata `HashMap`, but
+// cast back to `*mut` here so we can free the memory.
+//
+// The discussion here helps explain: https://github.com/rust-lang/rust-clippy/issues/4774
 impl Drop for MetadataPair {
     fn drop(&mut self) {
-        string::string_delete(self.key);
-        string::string_delete(self.value);
+        string::string_delete(self.key as *mut c_char);
+        string::string_delete(self.value as *mut c_char);
     }
 }
 

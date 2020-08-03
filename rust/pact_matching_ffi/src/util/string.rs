@@ -7,9 +7,7 @@ use std::ffi::CString;
 ///
 /// The returned pointer must be passed to CString::from_raw to
 /// prevent leaking memory.
-pub(crate) fn into_leaked_cstring(
-    t: &str,
-) -> anyhow::Result<*mut c_char> {
+pub(crate) fn to_c(t: &str) -> anyhow::Result<*mut c_char> {
     Ok(CString::new(t)?.into_raw())
 }
 
