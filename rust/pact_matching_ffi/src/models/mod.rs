@@ -2,3 +2,4 @@
 
 pub mod message;
 pub mod pact_specification;
+pub mod provider_state;
