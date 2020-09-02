@@ -235,20 +235,46 @@ install(FILES ${CARGO_INSTALL_FILES} TYPE LIB)
 # Defines the target for generating the header file.
 #################################################################################################
 
+# Define a fake file to ensure the header file is always rebuilt
+set(CBINDGEN_HEADER_FILE_FAKE "${CMAKE_HEADER_FILE}.fake")
+
+# Make sure the fake file doesn't actually exist, which would break this mechanism
+if(EXISTS ${CBINDGEN_HEADER_FILE_FAKE})
+  message(FATAL_ERROR "File \"${CBINDGEN_HEADER_FILE_FAKE}\" found, this should never be created, remove!")
+endif()
+
+# From the cmake documentation "If the output of the custom command is not actually created as a
+# file on disk it should be marked with the SYMBOLIC source file property."
+#
+# Not doing this leads to build warnings for the not generated file on windows when using msbuild
+set_source_files_properties(
+    ${CBINDGEN_HEADER_FILE_FAKE}
+    PROPERTIES
+        SYMBOLIC TRUE)
+
+# Mark the header file as being a generated header file.
+set_source_files_properties(
+    ${CBINDGEN_HEADER_FILE}
+    PROPERTIES
+        GENERATED TRUE
+        HEADER_FILE_ONLY TRUE)
+
 # Defines the cbindgen command to generate the header file.
 add_custom_command(
-    OUTPUT ${CBINDGEN_HEADER_FILE}
+    OUTPUT ${CBINDGEN_HEADER_FILE_FAKE} ${CBINDGEN_HEADER_FILE}
     COMMAND
         ${CBINDGEN_EXECUTABLE}
         --config ${CBINDGEN_CONFIG_FILE}
         --crate ${CRATE_NAME}
         --output ${CBINDGEN_HEADER_FILE}
+    COMMENT "Generating include/pact_matching.h"
+    BYPRODUCTS ${CBINDGEN_HEADER_FILE}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 
 # Add target for the header file
-add_custom_target(generate_header ALL
+add_custom_target(generate_header
     COMMENT "Generating header file with cbindgen"
-    DEPENDS ${CBINDGEN_HEADER_FILE})
+    DEPENDS ${CBINDGEN_HEADER_FILE_FAKE})
 
 # Teach CMake to install the header file built by the generate_header target
 install(FILES "${CBINDGEN_HEADER_FILE}" TYPE INCLUDE)
@@ -260,6 +286,12 @@ install(FILES "${CBINDGEN_HEADER_FILE}" TYPE INCLUDE)
 # Generates configuration for Doxygen and runs it to generate documentation.
 #################################################################################################
 
+# Make sure Doxygen is present.
+if(NOT DOXYGEN_FOUND)
+    message(WARNING "Could not find Doxygen; FFI documentation will not be generated")
+endif()
+
+# Configure Doxygen to be appropriate for our C header file.
 set(DOXYGEN_QUIET "YES")
 set(DOXYGEN_HTML_DYNAMIC_MENUS "YES")
 set(DOXYGEN_DYNAMIC_SECTIONS "YES")
@@ -277,16 +309,13 @@ set(DOXYGEN_JAVADOC_BLOCK "YES")
 set(DOXYGEN_FULL_PATH_NAMES "NO")
 set(DOXYGEN_OPTIMIZE_OUTPUT_FOR_C "YES")
 
-if(DOXYGEN_FOUND)
-    doxygen_add_docs(
-        generate_docs
-        ${CBINDGEN_HEADER_FILE}
-        ALL
-        USE_STAMP_FILE
-        COMMENT "Generating documentation with doxygen")
-else()
-    message(WARNING "Could not find Doxygen; FFI documentation will not be generated")
-endif()
+# Setup Doxygen.
+doxygen_add_docs(
+    generate_docs
+    ${CBINDGEN_HEADER_FILE}
+    ALL
+    COMMENT "Generating documentation with doxygen")
+
 
 #################################################################################################
 # PACKAGE FILES
