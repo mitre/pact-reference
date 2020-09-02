@@ -260,6 +260,23 @@ install(FILES "${CBINDGEN_HEADER_FILE}" TYPE INCLUDE)
 # Generates configuration for Doxygen and runs it to generate documentation.
 #################################################################################################
 
+set(DOXYGEN_QUIET "YES")
+set(DOXYGEN_HTML_DYNAMIC_MENUS "YES")
+set(DOXYGEN_DYNAMIC_SECTIONS "YES")
+set(DOXYGEN_DISABLE_INDEX "YES")
+set(DOXYGEN_GENERATE_TREEVIEW "YES")
+set(DOXYGEN_ENUM_VALUES_PER_LINE 1)
+set(DOXYGEN_EXT_LINKS_IN_WINDOW "YES")
+set(DOXYGEN_ALPHABETICAL_INDEX "NO")
+set(DOXYGEN_GENERATE_TODOLIST "NO")
+set(DOXYGEN_GENERATE_TESTLIST "NO")
+set(DOXYGEN_GENERATE_BUGLIST "NO")
+set(DOXYGEN_SHOW_USED_FILES "NO")
+set(DOXYGEN_JAVADOC_AUTOBRIEF "YES")
+set(DOXYGEN_JAVADOC_BLOCK "YES")
+set(DOXYGEN_FULL_PATH_NAMES "NO")
+set(DOXYGEN_OPTIMIZE_OUTPUT_FOR_C "YES")
+
 if(DOXYGEN_FOUND)
     doxygen_add_docs(
         generate_docs
