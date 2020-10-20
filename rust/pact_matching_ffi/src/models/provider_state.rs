@@ -2,6 +2,7 @@
 
 use crate::util::*;
 use crate::{as_mut, as_ref, ffi_fn};
+use anyhow::anyhow;
 use libc::{c_char, c_int, EXIT_FAILURE, EXIT_SUCCESS};
 use pact_matching::models::provider_states::ProviderState;
 use serde_json::Value as JsonValue;
@@ -61,11 +62,11 @@ ffi_fn! {
     ) -> *mut ProviderStateParamPair {
         let iter = as_mut!(iter);
         let provider_state = as_ref!(iter.provider_state);
-        let key = iter.next().ok_or(anyhow::anyhow!("iter past the end of params"))?;
+        let key = iter.next().ok_or(anyhow!("iter past the end of params"))?;
         let (key, value) = provider_state
             .params
             .get_key_value(key)
-            .ok_or(anyhow::anyhow!("iter provided invalid param key"))?;
+            .ok_or(anyhow!("iter provided invalid param key"))?;
         let pair = ProviderStateParamPair::new(key, value)?;
         ptr::raw_to(pair)
     } {
