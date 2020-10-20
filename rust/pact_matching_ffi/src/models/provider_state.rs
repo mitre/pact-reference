@@ -3,7 +3,7 @@
 use crate::util::*;
 use crate::{as_mut, as_ref, ffi_fn};
 use anyhow::anyhow;
-use libc::{c_char, c_int, EXIT_FAILURE, EXIT_SUCCESS};
+use libc::c_char;
 use pact_matching::models::provider_states::ProviderState;
 use serde_json::Value as JsonValue;
 
@@ -76,21 +76,15 @@ ffi_fn! {
 
 ffi_fn! {
     /// Free the provider state param iterator when you're done using it.
-    fn provider_state_param_iter_delete(iter: *mut ProviderStateParamIterator) -> c_int {
+    fn provider_state_param_iter_delete(iter: *mut ProviderStateParamIterator) {
         ptr::drop_raw(iter);
-        EXIT_SUCCESS
-    } {
-        EXIT_FAILURE
     }
 }
 
 ffi_fn! {
     /// Free a pair of key and value returned from `provider_state_param_iter_next`.
-    fn provider_state_param_pair_delete(pair: *mut ProviderStateParamPair) -> c_int {
+    fn provider_state_param_pair_delete(pair: *mut ProviderStateParamPair) {
         ptr::drop_raw(pair);
-        EXIT_SUCCESS
-    } {
-        EXIT_FAILURE
     }
 }
 

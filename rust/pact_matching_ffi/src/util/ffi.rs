@@ -25,7 +25,7 @@ macro_rules! ffi_fn {
         }
     };
 
-    ($(#[$doc:meta])* fn $name:ident($($arg:ident: $arg_ty:ty),*) $body:block $fail:block ) => {
-        ffi_fn!($(#[$doc])* fn $name($($arg: $arg_ty),*) -> () $body $fail);
+    ($(#[$doc:meta])* fn $name:ident($($arg:ident: $arg_ty:ty),*) $body:block ) => {
+        ffi_fn!($(#[$doc])* fn $name($($arg: $arg_ty),*) -> () $body {});
     };
 }

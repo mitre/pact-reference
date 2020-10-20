@@ -1,7 +1,7 @@
 //! FFI wrapper for `MessagePact` from pact_matching.
 
 use anyhow::{anyhow, Context};
-use libc::{c_char, c_int, EXIT_FAILURE, EXIT_SUCCESS};
+use libc::c_char;
 
 // Necessary to make 'cbindgen' generate an opaque struct on the C side.
 pub use pact_matching::models::message_pact::MessagePact;
@@ -38,11 +38,8 @@ ffi_fn! {
 
 ffi_fn! {
     /// Delete the `MessagePact` being pointed to.
-    fn message_pact_delete(message_pact: *mut MessagePact) -> c_int {
+    fn message_pact_delete(message_pact: *mut MessagePact) {
         ptr::drop_raw(message_pact);
-        EXIT_SUCCESS
-    } {
-        EXIT_FAILURE
     }
 }
 

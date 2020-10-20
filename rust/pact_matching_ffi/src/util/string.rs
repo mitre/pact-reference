@@ -1,5 +1,5 @@
 use crate::ffi_fn;
-use libc::{c_char, c_int, EXIT_FAILURE, EXIT_SUCCESS};
+use libc::c_char;
 use std::ffi::CString;
 use std::ops::Not;
 
@@ -18,15 +18,11 @@ ffi_fn! {
     ///
     /// It is explicitly allowed to pass a null pointer to this function;
     /// in that case the function will do nothing.
-    fn string_delete(string: *mut c_char) -> c_int {
+    fn string_delete(string: *mut c_char) {
         if string.is_null().not() {
             let string = unsafe { CString::from_raw(string) };
             std::mem::drop(string);
         }
-
-        EXIT_SUCCESS
-    } {
-        EXIT_FAILURE
     }
 }
 

@@ -64,11 +64,8 @@ ffi_fn! {
 
 ffi_fn! {
     /// Destroy the `Message` being pointed to.
-    fn message_delete(message: *mut Message) -> c_int {
+    fn message_delete(message: *mut Message) {
         ptr::drop_raw(message);
-        EXIT_SUCCESS
-    } {
-        EXIT_FAILURE
     }
 }
 
@@ -187,11 +184,8 @@ ffi_fn! {
 
 ffi_fn! {
     /// Delete the iterator.
-    fn provider_state_iter_delete(iter: *mut ProviderStateIterator) -> c_int {
+    fn provider_state_iter_delete(iter: *mut ProviderStateIterator) {
         ptr::drop_raw(iter);
-        EXIT_SUCCESS
-    } {
-        EXIT_FAILURE
     }
 }
 
@@ -325,21 +319,15 @@ ffi_fn! {
 
 ffi_fn! {
     /// Free the metadata iterator when you're done using it.
-    fn metadata_iter_delete(iter: *mut MetadataIterator) -> c_int {
+    fn metadata_iter_delete(iter: *mut MetadataIterator) {
         ptr::drop_raw(iter);
-        EXIT_SUCCESS
-    } {
-        EXIT_FAILURE
     }
 }
 
 ffi_fn! {
     /// Free a pair of key and value returned from `metadata_iter_next`.
-    fn metadata_pair_delete(pair: *mut MetadataPair) -> c_int {
+    fn metadata_pair_delete(pair: *mut MetadataPair) {
         ptr::drop_raw(pair);
-        EXIT_SUCCESS
-    } {
-        EXIT_FAILURE
     }
 }
 
