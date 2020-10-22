@@ -9,6 +9,7 @@ use crate::util::*;
 use crate::{as_mut, as_ref, cstr, ffi_fn, safe_str};
 use anyhow::{anyhow, Context};
 use libc::{c_char, c_int, c_uint, EXIT_FAILURE, EXIT_SUCCESS};
+use pact_matching::models::OptionalBody;
 use serde_json::from_str as from_json_str;
 use serde_json::Value as JsonValue;
 use std::ops::Drop;
@@ -66,6 +67,34 @@ ffi_fn! {
     /// Destroy the `Message` being pointed to.
     fn message_delete(message: *mut Message) {
         ptr::drop_raw(message);
+    }
+}
+
+/*-----------------------------------------------------------------------------------------------
+ * ## Contents
+ */
+
+ffi_fn! {
+    /// Get the contents of a `Message`.
+    fn message_get_contents(message: *const Message) -> *const c_char {
+        let message = as_ref!(message);
+
+        match message.contents {
+            // If it's missing, return a null pointer.
+            OptionalBody::Missing => ptr::null_to::<c_char>(),
+            // If empty or null, return an empty string on the heap.
+            OptionalBody::Empty | OptionalBody::Null => {
+                let content = string::to_c("")?;
+                content as *const c_char
+            }
+            // Otherwise, get the contents, possibly still empty.
+            _ => {
+                let content = string::to_c(message.contents.str_value())?;
+                content as *const c_char
+            }
+        }
+    } {
+        ptr::null_to::<c_char>()
     }
 }
 
