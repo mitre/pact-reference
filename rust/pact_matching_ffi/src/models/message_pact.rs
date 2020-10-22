@@ -1,5 +1,7 @@
 //! FFI wrapper for `MessagePact` from pact_matching.
 
+use crate::util::*;
+use crate::{as_ref, cstr, ffi_fn, safe_str};
 use anyhow::{anyhow, Context};
 use libc::c_char;
 
@@ -7,9 +9,6 @@ use libc::c_char;
 pub use pact_matching::models::message_pact::MessagePact;
 use pact_matching::models::Consumer;
 use pact_matching::models::Provider;
-
-use crate::util::*;
-use crate::{cstr, ffi_fn, safe_str};
 
 ffi_fn! {
     /// Construct a new `MessagePact` from the JSON string.
@@ -94,5 +93,35 @@ pub unsafe extern "C" fn message_pact_get_provider(
         fail: {
             ptr::null_mut_to::<Provider>()
         }
+    }
+}
+
+ffi_fn! {
+    /// Get a copy of the metadata value indexed by `key1` and `key2`.
+    /// The returned string must be deleted with `string_delete`.
+    ///
+    /// Since it is a copy, the returned string may safely outlive
+    /// the `Message`.
+    ///
+    /// The returned pointer will be NULL if the metadata does not contain
+    /// the given key, or if an error occurred.
+    ///
+    /// # Errors
+    ///
+    /// On failure, this function will return a NULL pointer.
+    ///
+    /// This function may fail if the provided `key1` or `key2` strings contains
+    /// invalid UTF-8, or if the Rust string contains embedded null ('\0')
+    /// bytes.
+    fn message_pact_find_metadata(message_pact: *const MessagePact, key1: *const c_char, key2: *const c_char) -> *const c_char {
+        let message_pact = as_ref!(message_pact);
+        let key1 = safe_str!(key1);
+        let key2 = safe_str!(key2);
+        let metadata = message_pact.metadata.get(key1).ok_or(anyhow::anyhow!("invalid metadata key (key 1)"))?;
+        let value = metadata.get(key2).ok_or(anyhow::anyhow!("invalid metadata key (key 2)"))?;
+        let value_ptr = string::to_c(value)?;
+        value_ptr as *const c_char
+    } {
+        ptr::null_to::<c_char>()
     }
 }
