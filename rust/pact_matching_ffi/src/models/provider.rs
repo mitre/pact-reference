@@ -1,8 +1,6 @@
 //! FFI wrapper code for pact_matching::models::Provider
 use libc::c_char;
 
-use anyhow::anyhow;
-
 pub use pact_matching::models::Provider;
 
 use crate::util::*;
@@ -19,7 +17,7 @@ ffi_fn! {
     /// In the case of error, a NULL pointer will be returned.
     fn provider_get_name(provider: *const Provider) -> *const c_char {
         let provider = as_ref!(provider);
-        Ok(string::to_c(&provider.name)? as *const c_char)
+        string::to_c(&provider.name)? as *const c_char
     } {
         ptr::null_to::<c_char>()
     }

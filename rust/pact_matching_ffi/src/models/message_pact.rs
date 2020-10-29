@@ -1,7 +1,7 @@
 //! FFI wrapper for `MessagePact` from pact_matching.
 
 use crate::util::*;
-use crate::{as_ref, cstr, ffi_fn, safe_str};
+use crate::{as_mut, as_ref, cstr, ffi_fn, safe_str};
 use anyhow::{anyhow, Context};
 use libc::c_char;
 
@@ -54,7 +54,7 @@ ffi_fn! {
     fn message_pact_get_consumer(message_pact: *mut MessagePact) -> *mut Consumer {
         let message_pact = as_mut!(message_pact);
         let consumer = &mut message_pact.consumer;
-        Ok(consumer as *mut Consumer)
+        consumer as *mut Consumer
     } {
         ptr::null_mut_to::<Consumer>()
     }
@@ -72,7 +72,7 @@ ffi_fn! {
     fn message_pact_get_provider(message_pact: *mut MessagePact) -> *mut Provider {
         let message_pact = as_mut!(message_pact);
         let provider = &mut message_pact.provider;
-        Ok(provider as *mut Provider)
+        provider as *mut Provider
     } {
         ptr::null_mut_to::<Provider>()
     }
