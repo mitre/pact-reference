@@ -42,57 +42,39 @@ ffi_fn! {
     }
 }
 
-/// Get a pointer to the Consumer struct inside the MessagePact.
-/// This is a mutable borrow: The caller may mutate the Consumer
-/// through this pointer.
-///
-/// # Errors
-///
-/// This function will only fail if it is passed a NULL pointer.
-/// In the case of error, a NULL pointer will be returned.
-#[no_mangle]
-#[allow(clippy::missing_safety_doc)]
-pub unsafe extern "C" fn message_pact_get_consumer(
-    message_pact: *mut MessagePact,
-) -> *mut Consumer {
-    ffi! {
-        name: "message_pact_get_consumer",
-        params: [message_pact],
-        op: {
-            let message_pact = as_mut!(message_pact);
-            let consumer = &mut message_pact.consumer;
-            Ok(consumer as *mut Consumer)
-        },
-        fail: {
-            ptr::null_mut_to::<Consumer>()
-        }
+ffi_fn! {
+    /// Get a pointer to the Consumer struct inside the MessagePact.
+    /// This is a mutable borrow: The caller may mutate the Consumer
+    /// through this pointer.
+    ///
+    /// # Errors
+    ///
+    /// This function will only fail if it is passed a NULL pointer.
+    /// In the case of error, a NULL pointer will be returned.
+    fn message_pact_get_consumer(message_pact: *mut MessagePact) -> *mut Consumer {
+        let message_pact = as_mut!(message_pact);
+        let consumer = &mut message_pact.consumer;
+        Ok(consumer as *mut Consumer)
+    } {
+        ptr::null_mut_to::<Consumer>()
     }
 }
 
-/// Get a pointer to the Provider struct inside the MessagePact.
-/// This is a mutable borrow: The caller may mutate the Provider
-/// through this pointer.
-///
-/// # Errors
-///
-/// This function will only fail if it is passed a NULL pointer.
-/// In the case of error, a NULL pointer will be returned.
-#[no_mangle]
-#[allow(clippy::missing_safety_doc)]
-pub unsafe extern "C" fn message_pact_get_provider(
-    message_pact: *mut MessagePact,
-) -> *mut Provider {
-    ffi! {
-        name: "message_pact_get_provider",
-        params: [message_pact],
-        op: {
-            let message_pact = as_mut!(message_pact);
-            let provider = &mut message_pact.provider;
-            Ok(provider as *mut Provider)
-        },
-        fail: {
-            ptr::null_mut_to::<Provider>()
-        }
+ffi_fn! {
+    /// Get a pointer to the Provider struct inside the MessagePact.
+    /// This is a mutable borrow: The caller may mutate the Provider
+    /// through this pointer.
+    ///
+    /// # Errors
+    ///
+    /// This function will only fail if it is passed a NULL pointer.
+    /// In the case of error, a NULL pointer will be returned.
+    fn message_pact_get_provider(message_pact: *mut MessagePact) -> *mut Provider {
+        let message_pact = as_mut!(message_pact);
+        let provider = &mut message_pact.provider;
+        Ok(provider as *mut Provider)
+    } {
+        ptr::null_mut_to::<Provider>()
     }
 }
 
