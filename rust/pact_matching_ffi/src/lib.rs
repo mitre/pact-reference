@@ -86,7 +86,7 @@ ffi_fn! {
 }
 
 ffi_fn! {
-    /// Get the type of a mismtatch.
+    /// Get the type of a mismatch.
     fn mismatch_type(mismatch: *const Mismatch) -> *const c_char {
         let mismatch = as_ref!(mismatch);
         let t = mismatch.mismatch_type();
