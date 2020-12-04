@@ -185,7 +185,7 @@ set(CRATE_NAME ${NAME_STRING})
 if(WIN32)
     set(CARGO_LIBRARY_NAME "${CRATE_NAME}.dll")
 else()
-    set(CARGO_LIBRARY_NAME "${CRATE_NAME}.a")
+    set(CARGO_LIBRARY_NAME "lib${CRATE_NAME}.so")
 endif()
 
 # The path to the library file.
