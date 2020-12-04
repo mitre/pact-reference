@@ -7,7 +7,7 @@ if(WIN32)
     set(LIB_NAME "@PACKAGE_LIB_INSTALL_DIR@/pact_matching_ffi.dll")
     set(IMPORT_NAME "${LIB_NAME}.lib")
 else()
-    set(LIB_NAME "@PACKAGE_LIB_INSTALL_DIR@/pact_matching_ffi.a")
+    set(LIB_NAME "@PACKAGE_LIB_INSTALL_DIR@/libpact_matching_ffi.so")
     set(IMPORT_NAME "")
 endif()
 
