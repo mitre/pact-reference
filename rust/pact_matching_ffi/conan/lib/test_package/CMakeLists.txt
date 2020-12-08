@@ -75,7 +75,6 @@ endif()
 # Sets the search path to the location of the package config
 #get_filename_component(REAL_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../.." ABSOLUTE)
 set(SEARCH_PATH "${PROJECT_BINARY_DIR}/lib/cmake")
-message(${SEARCH_PATH})
 
 # Find the pact matching FFI package and load the imported target
 find_package(PactMatchingFfi REQUIRED CONFIG PATHS ${SEARCH_PATH})
@@ -84,6 +83,10 @@ find_package(PactMatchingFfi REQUIRED CONFIG PATHS ${SEARCH_PATH})
 # BUILD
 #################################################################################################
 
+
+link_directories("${PROJECT_BINARY_DIR}/lib")
+
+
 # Define the executable
 add_executable(example src/main.c)
 add_executable(PactFFITests src/logger_tests.cpp src/message_tests.cpp)
@@ -91,8 +94,11 @@ ADD_TEST(NAME stuff
          WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
          COMMAND ${PROJECT_NAME})
 
+target_include_directories(PactFFITests PRIVATE "include")
+
+target_link_libraries(example PRIVATE pact_matching_ffi)
+target_link_libraries(PactFFITests PRIVATE pact_matching_ffi)
+target_link_libraries(PactFFITests PRIVATE gtest pthread)
 
 # Link to pact matching FFI
 
-target_link_libraries(PactFFITests PRIVATE "libpact_matching_ffi.so")
-target_link_libraries(PactFFITests PRIVATE gtest)

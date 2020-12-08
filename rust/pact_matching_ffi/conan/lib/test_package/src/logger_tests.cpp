@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 
-#include "../../include/pact_matching_ffi.h"
+#include <pact_matching.h>
 
 using namespace pact_matching;
 
