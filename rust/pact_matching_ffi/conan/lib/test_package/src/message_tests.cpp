@@ -3,7 +3,7 @@
 
 #include <gtest/gtest.h>
 
-#include "../../include/pact_matching_ffi.h"
+#include <pact_matching.h>
 
 using namespace pact_matching;
 
@@ -47,7 +47,7 @@ TEST(MessageTests, BadErrorGets)
 
 TEST(MessageTests, MessageFromJson)
 {
-    char *json_str = "{\
+    const char *json_str = "{\
         \"description\": \"String\",\
         \"providerState\": \"provider state\",\
         \"matchingRules\": {}\
@@ -57,7 +57,7 @@ TEST(MessageTests, MessageFromJson)
         message_new_from_json(0, json_str, PactSpecification_V3);
     ASSERT_NE(msg_json, nullptr);
 
-    char *bad_json_str =
+    const char *bad_json_str =
         "Lorem ipsum dolor sit amet, consectetur adipiscing elit";
 
     Message *bad_msg_json =
@@ -73,7 +73,7 @@ TEST(MessageTests, MessageDescriptions)
     logger_attach_sink("stdout", LevelFilter_Debug);
     logger_apply();
 
-    char *desc = "This is a message description.";
+    const char *desc = "This is a message description.";
     Message *msg = message_new();
 
     const char *out_desc = message_get_description(msg);
