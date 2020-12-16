@@ -33,7 +33,7 @@ enable_testing()
 # and cleaner.
 #################################################################################################
 
-INCLUDE(${CMAKE_BINARY_DIR}/../conanbuildinfo.cmake)
+INCLUDE(${CMAKE_BINARY_DIR}/conanbuildinfo.cmake)
 conan_basic_setup()
 
 # Set a path to the CMake config (this file)

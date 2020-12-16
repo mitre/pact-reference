@@ -3,7 +3,8 @@ import os
 
 class HelloTestConan(ConanFile):
     settings = "os", "compiler", "build_type", "arch"
-#    generators = "cmake"
+    generators = "cmake"
+    requires = "gtest/1.8.1@bincrafters/stable", "pact_matching_ffi/0.1.0"
 
     def configure(self):
         self.settings.compiler["gcc"].version = "8"
