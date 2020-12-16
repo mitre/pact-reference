@@ -9,6 +9,7 @@ class PactMatchingFfiConan(ConanFile):
     settings = "os", "compiler", "build_type", "arch"
     options = {"shared": [True, False]}
     default_options = {"shared": False}
+    generators = "cmake"
 
     def configure(self):
         self.settings.compiler["gcc"].version = "8"
