@@ -11,17 +11,15 @@ int main(void) {
     logger_apply();
 
     Message *msg = message_new();
-    int error = message_delete(msg);
+    message_delete(msg);
 
-    if (error == EXIT_FAILURE) {
-        char error_msg[ERROR_MSG_LEN];
+    char error_msg[ERROR_MSG_LEN];
 
-        int error = get_error_message(error_msg, ERROR_MSG_LEN);
+    int error = get_error_message(error_msg, ERROR_MSG_LEN);
 
-        printf("%s\n", error_msg);
+    printf("%s\n", error_msg);
 
-        return EXIT_FAILURE;
-    }
+    return EXIT_FAILURE;
 
     char *json_str = "{\
         \"description\": \"String\",\
