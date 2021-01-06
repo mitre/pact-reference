@@ -29,6 +29,7 @@ class PactMatchingFfiConan(ConanFile):
       #  conan_basic_setup()''')
 
     def build(self):
+        self.run("rustup override set nightly")
         cmake = CMake(self)
         cmake.configure(source_folder="pact-reference/rust/pact_matching_ffi")
         self.run("make generate_header")

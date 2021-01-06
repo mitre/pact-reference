@@ -1,8 +1,6 @@
 #include <gtest/gtest.h>
 
-#include <pact_matching.h>
-
-using namespace pact_matching;
+#include "../include/pact_matching.h"
 
 TEST(LoggerTests, ApplyFail)
 {

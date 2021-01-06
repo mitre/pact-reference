@@ -3,9 +3,7 @@
 
 #include <gtest/gtest.h>
 
-#include <pact_matching.h>
-
-using namespace pact_matching;
+#include "../include/pact_matching.h"
 
 // todo: status enum in ffi
 
@@ -21,8 +19,8 @@ TEST(MessageTests, DoubleDestroy)
     logger_apply();
 
     Message *msg = message_new();
-    ASSERT_EQ(message_delete(msg), EXIT_SUCCESS); // success
-    ASSERT_EQ(message_delete(msg), EXIT_FAILURE); // os failure
+    message_delete(msg); // success
+    message_delete(msg);
 }
 
 TEST(MessageTests, BadErrorGets)
@@ -32,9 +30,8 @@ TEST(MessageTests, BadErrorGets)
     logger_apply();
 
     Message *msg = message_new();
-    ASSERT_EQ(message_delete(msg), EXIT_SUCCESS); // success
-    // deliberately induce failure
-    ASSERT_EQ(message_delete(msg), EXIT_FAILURE); // os failure
+    message_delete(msg); 
+    message_delete(msg); 
 
     char null_error_msg[1];
     null_error_msg[0] = '\0';
@@ -119,15 +116,15 @@ TEST(MessageTests, MessageMetadata)
     out_val = message_find_metadata(msg, "LastName");
     ASSERT_STREQ(out_val, "Feez");
 
-    MetadataIterator *iter = message_get_metadata_iter(msg);
+    MessageMetadataIterator *iter = message_get_metadata_iter(msg);
     ASSERT_NE(iter, nullptr);
 
-    MetadataPair *pair = nullptr;
-    while ((pair = metadata_iter_next(iter)) != nullptr) {
+    MessageMetadataPair *pair = nullptr;
+    while ((pair = message_metadata_iter_next(iter)) != nullptr) {
         // todo: do something
-        ASSERT_EQ(metadata_pair_delete(pair), 0);
+        message_metadata_pair_delete(pair);
     }
 
     // todo: cleanup
-    ASSERT_EQ(metadata_iter_delete(iter), 0);
+    message_metadata_iter_delete(iter); 
 }
