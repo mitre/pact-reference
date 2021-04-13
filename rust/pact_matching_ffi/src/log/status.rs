@@ -1,5 +1,8 @@
 //! Status returned to the C caller for log FFI functions.
 
+// All of this module is `pub(crate)` and should not appear in the C header file
+// or documentation.
+
 use crate::log::logger::LoggerError;
 use crate::log::sink::SinkSpecifierError;
 use log::SetLoggerError;

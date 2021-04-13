@@ -12,9 +12,9 @@ use std::ffi::CStr;
 
 // C API uses something like the pledge API to select write locations, including:
 //
-// * stdout
-// * stderr
-// * file w/ file path
+// * stdout (`logger_attach_sink("stdout", LevelFilter_Info)`)
+// * stderr (`logger_attach_sink("stderr", LevelFilter_Debug)`)
+// * file w/ file path (`logger_attach_sink("file /some/file/path", LevelFilter_Trace)`)
 //
 // The general flow is:
 //
@@ -41,6 +41,16 @@ use std::ffi::CStr;
 /// Initialize the thread-local logger with no sinks.
 ///
 /// This initialized logger does nothing until `logger_apply` has been called.
+///
+/// # Usage
+///
+/// ```c
+/// logger_init();
+/// ```
+///
+/// # Safety
+///
+/// This function is always safe to call.
 #[no_mangle]
 pub extern "C" fn logger_init() {
     set_logger(Dispatch::new());
@@ -49,6 +59,34 @@ pub extern "C" fn logger_init() {
 /// Attach an additional sink to the thread-local logger.
 ///
 /// This logger does nothing until `logger_apply` has been called.
+///
+/// Three types of sinks can be specified:
+/// 
+/// - stdout (`logger_attach_sink("stdout", LevelFilter_Info)`)
+/// - stderr (`logger_attach_sink("stderr", LevelFilter_Debug)`)
+/// - file w/ file path (`logger_attach_sink("file /some/file/path", LevelFilter_Trace)`)
+///
+/// # Usage
+///
+/// ```
+/// int result = logger_attach_sink("file /some/file/path", LogLevel_Filter);
+/// ```
+///
+/// # Error Handling
+///
+/// The return error codes are as follows:
+///
+/// - `-1`: Can't set logger (applying the logger failed, perhaps because one is applied already).
+/// - `-2`: No logger has been initialized (call `logger_init` before any other log function).
+/// - `-3`: The sink specifier was not UTF-8 encoded.
+/// - `-4`: The sink type specified is not a known type (known types: "stdout", "stderr", or "file /some/path").
+/// - `-5`: No file path was specified in a file-type sink specification.
+/// - `-6`: Opening a sink to the specified file path failed (check permissions).
+///
+/// # Safety
+///
+/// This function checks the validity of the passed-in sink specifier, and errors
+/// out if the specifier isn't valid UTF-8.
 #[allow(clippy::missing_safety_doc)]
 #[no_mangle]
 pub unsafe extern "C" fn logger_attach_sink(
@@ -59,6 +97,8 @@ pub unsafe extern "C" fn logger_attach_sink(
     let sink_specifier = CStr::from_ptr(sink_specifier);
     let sink_specifier = match sink_specifier.to_str() {
         Ok(sink_specifier) => sink_specifier,
+        // TODO: Permit non-UTF8 strings, as some filesystems may have non-UTF8
+        //       paths to which the user wants to direct the logging output.
         Err(_) => return Status::SpecifierNotUtf8 as c_int,
     };
 
