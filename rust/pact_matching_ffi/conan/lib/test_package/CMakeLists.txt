@@ -73,7 +73,6 @@ endif()
 #################################################################################################
 
 # Sets the search path to the location of the package config
-#get_filename_component(REAL_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../.." ABSOLUTE)
 set(SEARCH_PATH "${PROJECT_BINARY_DIR}/lib/cmake")
 
 # Find the pact matching FFI package and load the imported target
@@ -94,11 +93,12 @@ ADD_TEST(NAME stuff
          WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
          COMMAND ${PROJECT_NAME})
 
+# Link to pact matching FFI
+
 target_include_directories(PactFFITests PRIVATE "include")
 
 target_link_libraries(example PRIVATE pact_matching_ffi)
 target_link_libraries(PactFFITests PRIVATE pact_matching_ffi)
 target_link_libraries(PactFFITests PRIVATE gtest pthread)
 
-# Link to pact matching FFI
 
