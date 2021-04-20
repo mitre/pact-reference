@@ -2,7 +2,6 @@
 
 use log::LevelFilter as NonCLevelFilter;
 
-
 // This is exactly equivalent to `LevelFilter` from the `log` crate,
 // except that it's `#[repr(C)]`, meaning it's safe to put in the signature
 // of a C-exposed FFI function.

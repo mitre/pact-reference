@@ -79,7 +79,7 @@ ffi_fn! {
     fn mismatch_to_json(mismatch: *const Mismatch) -> *const c_char {
         let mismatch = as_ref!(mismatch);
         let json = mismatch.to_json().to_string();
-        string::to_c(&json) as *const c_char
+        string::to_c(&json)? as *const c_char
     } {
         ptr::null_to::<c_char>()
     }

@@ -31,7 +31,7 @@ ffi_fn! {
     ///
     /// string_delete(name);
     /// ```
-    /// 
+    ///
     /// # Errors
     ///
     /// This function will fail if it is passed a NULL pointer,

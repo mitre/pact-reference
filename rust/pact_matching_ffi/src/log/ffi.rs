@@ -1,5 +1,6 @@
 //! The public FFI functions for initializing, adding sinks to, and applying a logger.
 
+use crate::error::set_error_msg;
 use crate::log::level_filter::LevelFilter;
 use crate::log::logger::{add_sink, apply_logger, set_logger};
 use crate::log::sink::Sink;
@@ -8,7 +9,105 @@ use fern::Dispatch;
 use libc::{c_char, c_int};
 use log::LevelFilter as LogLevelFilter;
 use std::convert::TryFrom;
-use std::ffi::CStr;
+use std::ffi::{CStr, CString};
+
+/// Convenience function to direct all logging to stdout.
+#[no_mangle]
+pub extern "C" fn log_to_stdout(level_filter: LevelFilter) -> c_int {
+    logger_init();
+
+    let spec = match CString::new("stdout") {
+        Ok(spec) => spec,
+        Err(e) => {
+            set_error_msg(e.to_string());
+            return Status::CantConstructSink as c_int;
+        }
+    };
+
+    let status = logger_attach_sink(spec.as_ptr(), level_filter);
+    if status != 0 {
+        return status;
+    }
+
+    let status = logger_apply();
+    if status != 0 {
+        return status;
+    }
+
+    Status::Success as c_int
+}
+
+/// Convenience function to direct all logging to stderr.
+#[no_mangle]
+pub extern "C" fn log_to_stderr(level_filter: LevelFilter) -> c_int {
+    logger_init();
+
+    let spec = match CString::new("stderr") {
+        Ok(spec) => spec,
+        Err(e) => {
+            set_error_msg(e.to_string());
+            return Status::CantConstructSink as c_int;
+        }
+    };
+
+    let status = logger_attach_sink(spec.as_ptr(), level_filter);
+    if status != 0 {
+        return status;
+    }
+
+    let status = logger_apply();
+    if status != 0 {
+        return status;
+    }
+
+    Status::Success as c_int
+}
+
+/// Convenience function to direct all logging to a file.
+#[no_mangle]
+pub extern "C" fn log_to_file(
+    file_name: *const c_char,
+    level_filter: LevelFilter,
+) -> c_int {
+    logger_init();
+
+    let spec = {
+        if file_name.is_null() {
+            return Status::CantConstructSink as c_int;
+        }
+
+        let file_name =
+            match unsafe { CStr::from_ptr(file_name) }.to_str() {
+                Ok(file_name) => file_name,
+                Err(e) => {
+                    set_error_msg(e.to_string());
+                    return Status::CantConstructSink as c_int;
+                }
+            };
+
+        let spec = format!("file {}", file_name);
+
+        match CString::new(spec) {
+            Ok(spec) => spec,
+            Err(e) => {
+                set_error_msg(e.to_string());
+                return Status::CantConstructSink as c_int;
+            }
+        }
+    };
+
+    let status = logger_attach_sink(spec.as_ptr(), level_filter);
+    if status != 0 {
+        return status;
+    }
+
+    let status = logger_apply();
+    if status != 0 {
+        return status;
+    }
+
+    Status::Success as c_int
+}
 
 // C API uses something like the pledge API to select write locations, including:
 //
@@ -61,7 +160,7 @@ pub extern "C" fn logger_init() {
 /// This logger does nothing until `logger_apply` has been called.
 ///
 /// Three types of sinks can be specified:
-/// 
+///
 /// - stdout (`logger_attach_sink("stdout", LevelFilter_Info)`)
 /// - stderr (`logger_attach_sink("stderr", LevelFilter_Debug)`)
 /// - file w/ file path (`logger_attach_sink("file /some/file/path", LevelFilter_Trace)`)
@@ -88,13 +187,14 @@ pub extern "C" fn logger_init() {
 /// This function checks the validity of the passed-in sink specifier, and errors
 /// out if the specifier isn't valid UTF-8.
 #[allow(clippy::missing_safety_doc)]
+#[allow(clippy::not_unsafe_ptr_args_deref)]
 #[no_mangle]
-pub unsafe extern "C" fn logger_attach_sink(
+pub extern "C" fn logger_attach_sink(
     sink_specifier: *const c_char,
     level_filter: LevelFilter,
 ) -> c_int {
     // Get the specifier from the raw C string.
-    let sink_specifier = CStr::from_ptr(sink_specifier);
+    let sink_specifier = unsafe { CStr::from_ptr(sink_specifier) };
     let sink_specifier = match sink_specifier.to_str() {
         Ok(sink_specifier) => sink_specifier,
         // TODO: Permit non-UTF8 strings, as some filesystems may have non-UTF8
