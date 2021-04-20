@@ -28,10 +28,10 @@ use std::ffi::CStr;
 // ```
 // logger_init();
 //
-// int result = logger_attach_sink("stdout");
+// int result = logger_attach_sink("stderr", FilterLevel_Debug);
 // /* handle the error */
 //
-// int result = logger_attach_sink("file /some/file/path")
+// int result = logger_attach_sink("file /some/file/path", FilterLevel_Info);
 // /* handle the error */
 //
 // int result = logger_apply();
