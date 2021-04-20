@@ -83,7 +83,7 @@ ffi_fn! {
     /// # Safety
     ///
     /// This function is safe.
-    /// 
+    ///
     /// # Error Handling
     ///
     /// This function will only fail if it is passed a NULL pointer.
