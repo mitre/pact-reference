@@ -60,4 +60,4 @@ $ cmake --build .
 ## Architecture
 
 You can read about the architecture and design choices of this crate in
-[ARCHITECTURE.md](./architecture.md).
+[ARCHITECTURE.md](./ARCHITECTURE.md).
