@@ -11,9 +11,8 @@ int main(void) {
     logger_apply();
 
     Message *msg = message_new();
-    int error = message_delete(msg);
 
-    if (error == EXIT_FAILURE) {
+    if (msg == NULL) {
         char error_msg[ERROR_MSG_LEN];
 
         int error = get_error_message(error_msg, ERROR_MSG_LEN);
@@ -23,12 +22,14 @@ int main(void) {
         return EXIT_FAILURE;
     }
 
+    message_delete(msg);
+
     char *json_str = "{\
         \"description\": \"String\",\
         \"providerState\": \"provider state\",\
         \"matchingRules\": {}\
     }";
-    Message *msg_json = message_from_json(0, json_str, PactSpecification_V3);
+    Message *msg_json = message_new_from_json(0, json_str, PactSpecification_V3);
 
     if (NULL == msg_json) {
         char error_msg[ERROR_MSG_LEN];
