@@ -76,7 +76,10 @@ For this purpose, we use the `ffi_fn` macro, found in
 `pact_matching_ffi/src/util/ffi.rs`. This macro is inspired by a
 [macro of the same name][hyper_macro] from the `hyper` crate's C API
 (created for use of Hyper in `curl`). Our macro does considerably more work
-to capture errors and ensure complete logging, but the idea is the same.
+to capture errors and ensure complete logging, but the idea is the same. The
+macro also ensures panics are captured and packaged up like regular errors.
+This includes panics due to allocation failure, although we don't do anything
+to handle this case specifically.
 
 One thing to note is that most functions using the macro will be written
 slightly differently from normal Rust functions. If the function being
@@ -99,7 +102,7 @@ ffi_fn! {
 }
 ```
 
-For destructors, or other functions which have to return value, no second
+For destructors, or other functions which have no return value, no second
 block is required.
 
 ```rust

@@ -142,7 +142,10 @@ ffi_fn! {
     ///
     /// # Error Handling
     ///
-    /// If the message is NULL, returns NULL.
+    /// If the message is NULL, returns NULL. If the body of the message
+    /// is missing, then this function also returns NULL. This means there's
+    /// no mechanism to differentiate with this function call alone between
+    /// a NULL message and a missing message body.
     fn message_get_contents(message: *const Message) -> *const c_char {
         let message = as_ref!(message);
 
