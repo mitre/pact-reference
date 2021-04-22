@@ -27,6 +27,10 @@ ffi_fn! {
     /// }
     ///
     /// char *name = consumer_get_name(consumer);
+    /// if (name == NULL) {
+    ///     // handle error.
+    /// }
+    ///
     /// printf("%s\n", name);
     ///
     /// string_delete(name);

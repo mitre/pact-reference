@@ -27,6 +27,10 @@ ffi_fn! {
     /// }
     ///
     /// char *name = provider_get_name(provider);
+    /// if (name == NULL) {
+    ///     // handle error.
+    /// }
+    ///
     /// printf("%s\n", name);
     ///
     /// string_delete(name);
