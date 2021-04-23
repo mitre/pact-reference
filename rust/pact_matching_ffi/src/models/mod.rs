@@ -1,6 +1,7 @@
 //! Represents messages in `pact_matching`.
 
 pub mod consumer;
+pub mod matching_rules;
 pub mod message;
 pub mod message_pact;
 pub mod pact_specification;
