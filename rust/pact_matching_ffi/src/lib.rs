@@ -14,7 +14,10 @@ use crate::util::*;
 use libc::c_char;
 use models::message::Message;
 use pact_matching::{self as pm, models::Interaction};
+use pact_matching::DiffConfig as NonCDiffConfig;
+use std::convert::{From, Into};
 
+pub use pact_matching::MatchingContext;
 pub use pact_matching::Mismatch;
 
 ffi_fn! {
@@ -147,5 +150,63 @@ impl MismatchesIterator {
         let idx = self.current;
         self.current += 1;
         idx
+    }
+}
+
+
+ffi_fn! {
+    /// Get a new default `MatchingContext`.
+    fn matching_context_new_default(config: DiffConfig) -> *mut MatchingContext {
+        ptr::raw_to(MatchingContext::default())
+    } {
+        ptr::null_mut_to::<MatchingContext>()
+    }
+}
+
+ffi_fn! {
+    /// Get a new `MatchingContext` with the given `DiffConfig`.
+    fn matching_context_new_with_config(config: DiffConfig) -> *mut MatchingContext {
+        ptr::raw_to(MatchingContext::with_config(config.into()))
+    } {
+        ptr::null_mut_to::<MatchingContext>()
+    }
+}
+
+/// The configuration options for performing a match.
+#[repr(C)]
+#[derive(Debug, Copy, Clone, PartialEq)]
+#[allow(non_camel_case_types)]
+pub enum DiffConfig {
+    /// If unexpected keys are allowed and ignored during matching.
+    AllowUnexpectedKeys,
+    /// If unexpected keys cause a mismatch.
+    NoUnexpectedKeys,
+}
+
+impl From<NonCDiffConfig> for DiffConfig {
+    #[inline]
+    fn from(other: NonCDiffConfig) -> DiffConfig {
+        match other {
+            NonCDiffConfig::AllowUnexpectedKeys => {
+                DiffConfig::AllowUnexpectedKeys
+            }
+            NonCDiffConfig::NoUnexpectedKeys => {
+                DiffConfig::NoUnexpectedKeys
+            }
+        }
+    }
+}
+
+impl Into<NonCDiffConfig> for DiffConfig {
+    #[inline]
+    fn into(self) -> NonCDiffConfig {
+        match self {
+            DiffConfig::AllowUnexpectedKeys => {
+                NonCDiffConfig::AllowUnexpectedKeys
+            }
+            DiffConfig::NoUnexpectedKeys => {
+                NonCDiffConfig::NoUnexpectedKeys
+            }
+        }
     }
 }
