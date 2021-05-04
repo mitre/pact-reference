@@ -426,17 +426,20 @@ impl MatchingContext {
   /// If there is a wildcard matcher defined at the path in this context
   #[deprecated(since = "0.8.12", note = "Replaced with values matcher")]
   pub fn wildcard_matcher_is_defined(&self, path: &[&str]) -> bool {
-    !self.matchers_for_exact_path(path).filter(|&(val, _)| val.ends_with(".*")).is_empty()
+    !self.matchers_for_exact_path(path).filter(|&(val, _)| val.is_wildcard()).is_empty()
   }
 
   fn matchers_for_exact_path(&self, path: &[&str]) -> MatchingRuleCategory {
     if self.matchers.name == "body" {
       self.matchers.filter(|&(val, _)| {
-        calc_path_weight(val, path).0 > 0 && path_length(val) == path.len()
+        val.calc_path_weight(path).0 > 0 && val.len() == path.len()
       })
     } else if self.matchers.name == "header" || self.matchers.name == "query" {
       self.matchers.filter(|&(val, _)| {
-        path.len() == 1 && path[0] == *val
+        // Cal TODO is this correct?
+        // What will happen with ns aliases?
+        // lib.rs, matchers_for_exact_path
+        path.len() == 1 && path[0] == val.orig_string()
       })
     } else {
       self.matchers.filter(|_| false)
@@ -1487,10 +1490,11 @@ pub fn generate_request(request: &models::Request, mode: &GeneratorTestMode, con
   if !generators.is_empty() {
     debug!("Applying header generators...");
     apply_generators(mode, &generators, &mut |key, generator| {
+      let key = key.orig_string();
       if let Some(ref mut headers) = request.headers {
         if headers.contains_key(key) {
           if let Ok(v) = generator.generate_value(&headers.get(key).unwrap().clone(), context) {
-            headers.insert(key.clone(), v);
+            headers.insert(key.to_string(), v);
           }
         }
       }
@@ -1501,6 +1505,7 @@ pub fn generate_request(request: &models::Request, mode: &GeneratorTestMode, con
   if !generators.is_empty() {
     debug!("Applying query generators...");
     apply_generators(mode, &generators, &mut |key, generator| {
+      let key = key.orig_string();
       if let Some(ref mut parameters) = request.query {
         if let Some(parameter) = parameters.get_mut(key) {
           let mut generated = parameter.clone();
@@ -1542,12 +1547,13 @@ pub fn generate_response(response: &models::Response, mode: &GeneratorTestMode, 
   if !generators.is_empty() {
     debug!("Applying header generators...");
     apply_generators(mode, &generators, &mut |key, generator| {
+      let key = key.orig_string();
       if let Some(ref mut headers) = response.headers {
         if headers.contains_key(key) {
           match generator.generate_value(&headers.get(key).unwrap().clone(), context) {
             Ok(v) => {
               debug!("Generated value for header: {} -> {:?}", key, v);
-              headers.insert(key.clone(), v)
+              headers.insert(key.to_string(), v)
             },
             Err(_) => None
           };

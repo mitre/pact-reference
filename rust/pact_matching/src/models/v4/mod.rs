@@ -956,8 +956,8 @@ pub fn interaction_from_json(source: &str, index: usize, ijson: &Value) -> anyho
               key,
               description,
               provider_states,
-              request: HttpRequest::from_json(&request),
-              response: HttpResponse::from_json(&response),
+              request: HttpRequest::from_json(&request)?,
+              response: HttpResponse::from_json(&response)?,
               comments
             }))
           }
@@ -976,8 +976,8 @@ pub fn interaction_from_json(source: &str, index: usize, ijson: &Value) -> anyho
               provider_states,
               metadata,
               contents: body_from_json(ijson, "contents", &as_headers),
-              matching_rules: matchingrules::matchers_from_json(ijson, &None),
-              generators: generators::generators_from_json(ijson),
+              matching_rules: matchingrules::matchers_from_json(ijson, &None)?,
+              generators: generators::generators_from_json(ijson)?,
               comments
             }))
           }

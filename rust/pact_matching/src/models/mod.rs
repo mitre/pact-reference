@@ -42,6 +42,7 @@ use crate::models::provider_states::ProviderState;
 use crate::models::v4::{AsynchronousMessage, interaction_from_json, SynchronousHttp, V4Interaction, V4Pact};
 use crate::models::v4::http_parts::{HttpRequest, HttpResponse};
 use crate::models::v4::sync_message::SynchronousMessages;
+use crate::path_exp::JSONPath;
 
 pub mod json_utils;
 pub mod xml_utils;
@@ -155,7 +156,7 @@ pub trait HttpPart {
   }
 
   /// Builds a map of generators from the generators and matching rules
-  fn build_generators(&self, category: &GeneratorCategory) -> HashMap<String, Generator> {
+  fn build_generators(&self, category: &GeneratorCategory) -> HashMap<JSONPath, Generator> {
     let mut generators = hashmap!{};
     if let Some(generators_for_category) = self.generators().categories.get(category) {
       for (path, generator) in generators_for_category {
@@ -414,7 +415,7 @@ fn query_to_json(query: HashMap<String, Vec<String>>, spec_version: &PactSpecifi
 
 impl Request {
     /// Builds a `Request` from a `Value` struct.
-    pub fn from_json(request_json: &Value, spec_version: &PactSpecification) -> Request {
+    pub fn from_json(request_json: &Value, spec_version: &PactSpecification) -> anyhow::Result<Request> {
         let method_val = match request_json.get("method") {
             Some(v) => match *v {
                 Value::String(ref s) => s.to_uppercase(),
@@ -437,15 +438,15 @@ impl Request {
             None => None
         };
         let headers = headers_from_json(request_json);
-        Request {
+        Ok(Request {
             method: method_val,
             path: path_val,
             query: query_val,
             headers: headers.clone(),
             body: body_from_json(request_json, "body", &headers),
-            matching_rules: matchingrules::matchers_from_json(request_json, &Some(s!("requestMatchingRules"))),
-            generators: generators::generators_from_json(request_json)
-        }
+            matching_rules: matchingrules::matchers_from_json(request_json, &Some(s!("requestMatchingRules")))?,
+            generators: generators::generators_from_json(request_json)?
+        })
     }
 
     /// Converts this `Request` to a `Value` struct.
@@ -559,19 +560,19 @@ pub struct Response {
 impl Response {
 
     /// Build a `Response` from a `Value` struct.
-    pub fn from_json(response: &Value, _: &PactSpecification) -> Response {
+    pub fn from_json(response: &Value, _: &PactSpecification) -> anyhow::Result<Response> {
         let status_val = match response.get("status") {
             Some(v) => v.as_u64().unwrap() as u16,
             None => 200
         };
         let headers = headers_from_json(response);
-        Response {
+        Ok(Response {
             status: status_val,
             headers: headers.clone(),
             body: body_from_json(response, "body", &headers),
-            matching_rules:  matchingrules::matchers_from_json(response, &Some(s!("responseMatchingRules"))),
-            generators:  generators::generators_from_json(response)
-        }
+            matching_rules:  matchingrules::matchers_from_json(response, &Some(s!("responseMatchingRules")))?,
+            generators:  generators::generators_from_json(response)?
+        })
     }
 
     /// Returns a default response: Status 200
@@ -952,7 +953,8 @@ impl Interaction for RequestResponseInteraction {
 
 impl RequestResponseInteraction {
     /// Constructs an `Interaction` from the `Value` struct.
-    pub fn from_json(index: usize, pact_json: &Value, spec_version: &PactSpecification) -> RequestResponseInteraction {
+    pub fn from_json(index: usize, pact_json: &Value, spec_version: &PactSpecification)
+    -> anyhow::Result<RequestResponseInteraction> {
         let id = pact_json.get("_id").map(|id| json_to_string(id));
         let description = match pact_json.get("description") {
             Some(v) => match *v {
@@ -963,20 +965,20 @@ impl RequestResponseInteraction {
         };
         let provider_states = provider_states::ProviderState::from_json(pact_json);
         let request = match pact_json.get("request") {
-            Some(v) => Request::from_json(v, spec_version),
+            Some(v) => Request::from_json(v, spec_version)?,
             None => Request::default()
         };
         let response = match pact_json.get("response") {
-            Some(v) => Response::from_json(v, spec_version),
+            Some(v) => Response::from_json(v, spec_version)?,
             None => Response::default()
         };
-      RequestResponseInteraction {
+      Ok(RequestResponseInteraction {
           id,
           description,
           provider_states,
           request,
           response
-        }
+      })
     }
 
     /// Converts this interaction to a `Value` struct.
@@ -1204,15 +1206,21 @@ fn parse_meta_data(pact_json: &Value) -> BTreeMap<String, BTreeMap<String, Strin
     }
 }
 
-fn parse_interactions(pact_json: &Value, spec_version: PactSpecification) -> Vec<RequestResponseInteraction> {
+fn parse_interactions(pact_json: &Value, spec_version: PactSpecification) -> anyhow::Result<Vec<RequestResponseInteraction>> {
     match pact_json.get("interactions") {
         Some(v) => match *v {
-            Value::Array(ref array) => array.iter().enumerate().map(|(index, ijson)| {
-              RequestResponseInteraction::from_json(index, ijson, &spec_version)
-            }).collect(),
-            _ => vec![]
+            Value::Array(ref array) => {
+              let mut interactions = Vec::new();
+              for (index, ijson) in array.iter().enumerate() {
+                interactions.push(
+                  RequestResponseInteraction::from_json(index, ijson, &spec_version)?
+                );
+              }
+              Ok(interactions)
+            },
+            _ => Ok(vec![])
         },
-        None => vec![]
+        None => Ok(vec![])
     }
 }
 
@@ -1269,7 +1277,7 @@ impl RequestResponsePact {
     }
 
     /// Creates a `Pact` from a `Value` struct.
-    pub fn from_json(file: &str, pact_json: &Value) -> RequestResponsePact {
+    pub fn from_json(file: &str, pact_json: &Value) -> anyhow::Result<RequestResponsePact> {
         let metadata = parse_meta_data(pact_json);
         let spec_version = determine_spec_version(file, &metadata);
 
@@ -1281,13 +1289,13 @@ impl RequestResponsePact {
             Some(v) => Provider::from_json(v),
             None => Provider { name: s!("provider") }
         };
-        RequestResponsePact {
+        Ok(RequestResponsePact {
             consumer,
             provider,
-            interactions: parse_interactions(pact_json, spec_version.clone()),
+            interactions: parse_interactions(pact_json, spec_version.clone())?,
             metadata,
             specification_version: spec_version
-        }
+        })
     }
 
     /// Creates a BTreeMap of the metadata of this pact.
@@ -1312,7 +1320,8 @@ impl RequestResponsePact {
 
     /// Reads the pact file from a URL and parses the resulting JSON into a `Pact` struct
     pub fn from_url(url: &str, auth: &Option<HttpAuth>) -> anyhow::Result<RequestResponsePact> {
-      http_utils::fetch_json_from_url(&url.to_string(), auth).map(|(ref url, ref json)| RequestResponsePact::from_json(url, json))
+      let (url, json) = http_utils::fetch_json_from_url(&url.to_string(), auth)?;
+      RequestResponsePact::from_json(&url, &json)
     }
 
     /// Returns a default RequestResponsePact struct
@@ -1340,7 +1349,7 @@ impl ReadWritePact for RequestResponsePact {
     with_read_lock(path, 3, &mut |f| {
       let pact_json = serde_json::from_reader(f)
         .context("Failed to parse Pact JSON")?;
-      Ok(RequestResponsePact::from_json(&format!("{:?}", path), &pact_json))
+      RequestResponsePact::from_json(&format!("{:?}", path), &pact_json)
     })
   }
 
@@ -1520,11 +1529,12 @@ pub fn parse_query_string(query: &str) -> Option<HashMap<String, Vec<String>>> {
 }
 
 /// Converts the JSON struct into an HTTP Interaction
-pub fn http_interaction_from_json(source: &str, json: &Value, spec: &PactSpecification) -> anyhow::Result<Box<dyn Interaction + Send>> {
+pub fn http_interaction_from_json(source: &str, json: &Value, spec: &PactSpecification)
+-> anyhow::Result<Box<dyn Interaction + Send>> {
   match spec {
     PactSpecification::V4 => interaction_from_json(source, 0, json)
       .map(|i| i.boxed()),
-    _ => Ok(Box::new(RequestResponseInteraction::from_json(0, json, spec)))
+    _ => Ok(Box::new(RequestResponseInteraction::from_json(0, json, spec)?))
   }
 }
 
@@ -1578,7 +1588,7 @@ pub fn load_pact_from_json(source: &str, json: &Value) -> anyhow::Result<Box<dyn
       let spec_version = determine_spec_version(source, &metadata);
       match spec_version {
         PactSpecification::V4 => v4::from_json(&source, json),
-        _ => Ok(Box::new(RequestResponsePact::from_json(source, json)))
+        _ => Ok(Box::new(RequestResponsePact::from_json(source, json)?))
       }
     },
     _ => Err(anyhow!("Failed to parse Pact JSON from source '{}' - it is not a valid pact file", source))

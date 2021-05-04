@@ -11,6 +11,7 @@ use pact_matching::models::{Request, Response};
 use pact_matching::models::generators::{Generator, GeneratorCategory, Generators};
 use pact_matching::models::json_utils::{json_to_num, json_to_string};
 use pact_matching::models::matchingrules::{MatchingRule, MatchingRuleCategory, RuleLogic};
+use pact_matching::path_exp::JSONPath;
 use pact_models::bodies::OptionalBody;
 
 const CONTENT_TYPE_HEADER: &str = "Content-Type";
@@ -202,7 +203,8 @@ pub fn process_json_value(body: &Value, matching_rules: &mut MatchingRuleCategor
 }
 
 /// Setup the request as a multipart form upload
-pub fn request_multipart(request: &mut Request, boundary: &str, body: OptionalBody, content_type: &str, part_name: &str) {
+pub fn request_multipart(request: &mut Request, boundary: &str, body: OptionalBody, content_type: &str, part_name: &str)
+-> anyhow::Result<()> {
   request.body = body;
   match request.headers {
     Some(ref mut headers) => {
@@ -215,13 +217,17 @@ pub fn request_multipart(request: &mut Request, boundary: &str, body: OptionalBo
     }
   };
   request.matching_rules.add_category("body")
-    .add_rule(format!("$['{}']", part_name), MatchingRule::ContentType(content_type.into()), &RuleLogic::And);
+    .add_rule(JSONPath::new(format!("$['{}']", part_name))?,
+      MatchingRule::ContentType(content_type.into()), &RuleLogic::And);
   request.matching_rules.add_category("header")
-    .add_rule("Content-Type", MatchingRule::Regex(r"multipart/form-data;(\s*charset=[^;]*;)?\s*boundary=.*".into()), &RuleLogic::And);
+    .add_rule(JSONPath::new_unwrap("Content-Type"),
+      MatchingRule::Regex(r"multipart/form-data;(\s*charset=[^;]*;)?\s*boundary=.*".into()), &RuleLogic::And);
+  Ok(())
 }
 
 /// Setup the response as a multipart form upload
-pub fn response_multipart(response: &mut Response, boundary: &str, body: OptionalBody, content_type: &str, part_name: &str) {
+pub fn response_multipart(response: &mut Response, boundary: &str, body: OptionalBody, content_type: &str, part_name: &str)
+-> anyhow::Result<()> {
   response.body = body;
   match response.headers {
     Some(ref mut headers) => {
@@ -234,9 +240,11 @@ pub fn response_multipart(response: &mut Response, boundary: &str, body: Optiona
     }
   }
   response.matching_rules.add_category("body")
-    .add_rule(format!("$['{}']", part_name), MatchingRule::ContentType(content_type.into()), &RuleLogic::And);
+    .add_rule(JSONPath::new(format!("$['{}']", part_name))?,
+      MatchingRule::ContentType(content_type.into()), &RuleLogic::And);
   response.matching_rules.add_category("header")
-    .add_rule("Content-Type", MatchingRule::Regex(r"multipart/form-data;(\s*charset=[^;]*;)?\s*boundary=.*".into()), &RuleLogic::And);
+    .add_rule(JSONPath::new_unwrap("Content-Type"),
+      MatchingRule::Regex(r"multipart/form-data;(\s*charset=[^;]*;)?\s*boundary=.*".into()), &RuleLogic::And);
 }
 
 /// Representation of a multipart body

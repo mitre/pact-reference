@@ -36,7 +36,7 @@ use crate::models::json_utils::{get_field_as_string, json_to_string, JsonToNum};
 use crate::models::matchingrules::MatchingRuleCategory;
 use crate::models::OptionalBody;
 use crate::models::xml_utils::parse_bytes;
-use crate::path_exp::*;
+use crate::path_exp::{JSONPath, PathToken};
 use crate::time_utils::{parse_pattern, to_chrono_pattern};
 
 /// Trait to represent a generator
@@ -67,7 +67,7 @@ pub enum Generator {
   /// Generates a URL with the mock server as the base URL
   MockServerURL(String, String),
   /// List of variants which can have embedded generators
-  ArrayContains(Vec<(usize, MatchingRuleCategory, HashMap<String, Generator>)>)
+  ArrayContains(Vec<(usize, MatchingRuleCategory, HashMap<JSONPath, Generator>)>)
 }
 
 impl Generator {
@@ -583,9 +583,9 @@ impl GenerateValue<Vec<String>> for Generator {
 
 pub(crate) fn find_matching_variant<T>(
   value: &T,
-  variants: &Vec<(usize, MatchingRuleCategory, HashMap<String, Generator>)>,
+  variants: &Vec<(usize, MatchingRuleCategory, HashMap<JSONPath, Generator>)>,
   callback: &dyn Fn(&Vec<&str>, &T, &MatchingContext) -> bool
-) -> Option<(usize, HashMap<String, Generator>)>
+) -> Option<(usize, HashMap<JSONPath, Generator>)>
   where T: Clone + std::fmt::Debug {
   let result = variants.iter()
     .find(|(index, rules, _)| {
@@ -655,9 +655,9 @@ impl Into<String> for GeneratorCategory {
 /// Trait to define a handler for applying generators to data of a particular content type.
 pub trait ContentTypeHandler<T> {
   /// Processes the body using the map of generators, returning a (possibly) updated body.
-  fn process_body(&mut self, generators: &HashMap<String, Generator>, mode: &GeneratorTestMode, context: &HashMap<&str, Value>) -> Result<OptionalBody, String>;
+  fn process_body(&mut self, generators: &HashMap<JSONPath, Generator>, mode: &GeneratorTestMode, context: &HashMap<&str, Value>) -> Result<OptionalBody, String>;
   /// Applies the generator to the key in the body.
-  fn apply_key(&mut self, key: &String, generator: &dyn GenerateValue<T>, context: &HashMap<&str, Value>);
+  fn apply_key(&mut self, key: &JSONPath, generator: &dyn GenerateValue<T>, context: &HashMap<&str, Value>);
 }
 
 /// Implementation of a content type handler for JSON
@@ -740,54 +740,50 @@ impl JsonHandler {
 impl ContentTypeHandler<Value> for JsonHandler {
   fn process_body(
     &mut self,
-    generators: &HashMap<String, Generator>,
+    generators: &HashMap<JSONPath, Generator>,
     mode: &GeneratorTestMode,
     context: &HashMap<&str, Value>
   ) -> Result<OptionalBody, String> {
     for (key, generator) in generators {
       if generator.corresponds_to_mode(mode) {
-        debug!("Applying generator {:?} to key {}", generator, key);
+        debug!("Applying generator {:?} to key {}", generator, key.orig_string());
         self.apply_key(key, generator, context);
       }
     };
     Ok(OptionalBody::Present(self.value.to_string().into(), Some("application/json".into())))
   }
 
-  fn apply_key(&mut self, key: &String, generator: &dyn GenerateValue<Value>, context: &HashMap<&str, Value>) {
-    match parse_path_exp(key) {
-      Ok(path_exp) => {
-        let mut tree = Arena::new();
-        let root = tree.new_node("".into());
-        self.query_object_graph(&path_exp, &mut tree, root, self.value.clone());
-        let expanded_paths = root.descendants(&tree).fold(Vec::<String>::new(), |mut acc, node_id| {
-          let node = tree.index(node_id);
-          if !node.get().is_empty() && node.first_child().is_none() {
-            let path: Vec<String> = node_id.ancestors(&tree).map(|n| format!("{}", tree.index(n).get())).collect();
-            if path.len() == path_exp.len() {
-              acc.push(path.iter().rev().join("/"));
-            }
-          }
-          acc
-        });
-
-        if !expanded_paths.is_empty() {
-          for pointer_str in expanded_paths {
-            match self.value.pointer_mut(&pointer_str) {
-              Some(json_value) => match generator.generate_value(&json_value.clone(), context) {
-                Ok(new_value) => *json_value = new_value,
-                Err(_) => ()
-              },
-              None => ()
-            }
-          }
-        } else if path_exp.len() == 1 {
-          match generator.generate_value(&self.value.clone(), context) {
-            Ok(new_value) => self.value = new_value,
-            Err(_) => ()
-          }
+  fn apply_key(&mut self, key: &JSONPath, generator: &dyn GenerateValue<Value>, context: &HashMap<&str, Value>) {
+    let path_exp = key;
+    let mut tree = Arena::new();
+    let root = tree.new_node("".into());
+    self.query_object_graph(path_exp.tokens(), &mut tree, root, self.value.clone());
+    let expanded_paths = root.descendants(&tree).fold(Vec::<String>::new(), |mut acc, node_id| {
+      let node = tree.index(node_id);
+      if !node.get().is_empty() && node.first_child().is_none() {
+        let path: Vec<String> = node_id.ancestors(&tree).map(|n| format!("{}", tree.index(n).get())).collect();
+        if path.len() == path_exp.len() {
+          acc.push(path.iter().rev().join("/"));
         }
-      },
-      Err(err) => log::warn!("Generator path '{}' is invalid, ignoring: {}", key, err)
+      }
+      acc
+    });
+
+    if !expanded_paths.is_empty() {
+      for pointer_str in expanded_paths {
+        match self.value.pointer_mut(&pointer_str) {
+          Some(json_value) => match generator.generate_value(&json_value.clone(), context) {
+            Ok(new_value) => *json_value = new_value,
+            Err(_) => ()
+          },
+          None => ()
+        }
+      }
+    } else if path_exp.len() == 1 {
+      match generator.generate_value(&self.value.clone(), context) {
+        Ok(new_value) => self.value = new_value,
+        Err(_) => ()
+      }
     }
   }
 }
@@ -799,12 +795,12 @@ pub struct XmlHandler<'a> {
 }
 
 impl <'a> ContentTypeHandler<Document<'a>> for XmlHandler<'a> {
-  fn process_body(&mut self, _generators: &HashMap<String, Generator>, _mode: &GeneratorTestMode, _context: &HashMap<&str, Value>) -> Result<OptionalBody, String> {
+  fn process_body(&mut self, _generators: &HashMap<JSONPath, Generator>, _mode: &GeneratorTestMode, _context: &HashMap<&str, Value>) -> Result<OptionalBody, String> {
     error!("UNIMPLEMENTED: Generators are not supported with XML");
     Err("Generators are not supported with XML".to_string())
   }
 
-  fn apply_key(&mut self, _key: &String, _generator: &dyn GenerateValue<Document<'a>>, _context: &HashMap<&str, Value>) {
+  fn apply_key(&mut self, _key: &JSONPath, _generator: &dyn GenerateValue<Document<'a>>, _context: &HashMap<&str, Value>) {
     error!("UNIMPLEMENTED: Generators are not supported with XML");
   }
 }
@@ -823,7 +819,7 @@ pub enum GeneratorTestMode {
 #[serde(transparent)]
 pub struct Generators {
   /// Map of generator categories to maps of generators
-  pub categories: HashMap<GeneratorCategory, HashMap<String, Generator>>
+  pub categories: HashMap<GeneratorCategory, HashMap<JSONPath, Generator>>
 }
 
 impl Generators {
@@ -838,7 +834,8 @@ impl Generators {
   }
 
   /// Loads the generators for a JSON map
-  pub fn load_from_map(&mut self, map: &serde_json::Map<String, Value>) {
+  pub fn load_from_map(&mut self, map: &serde_json::Map<String, Value>)
+  -> anyhow::Result<()> {
     for (k, v) in map {
       match v {
         &Value::Object(ref map) =>  match GeneratorCategory::from_str(k) {
@@ -848,7 +845,7 @@ impl Generators {
             },
             _ => for (sub_k, sub_v) in map {
               match sub_v {
-                &Value::Object(ref map) => self.parse_generator_from_map(category, map, Some(sub_k.clone())),
+                &Value::Object(ref map) => self.parse_generator_from_map(category, map, Some(JSONPath::new(sub_k)?)),
                 _ => log::warn!("Ignoring invalid generator JSON '{}' -> {:?}", sub_k, sub_v)
               }
             }
@@ -858,10 +855,11 @@ impl Generators {
         _ => log::warn!("Ignoring invalid generator JSON '{}' -> {:?}", k, v)
       }
     }
+    Ok(())
   }
 
   pub(crate) fn parse_generator_from_map(&mut self, category: &GeneratorCategory,
-                              map: &serde_json::Map<String, Value>, subcat: Option<String>) {
+                              map: &serde_json::Map<String, Value>, subcat: Option<JSONPath>) {
     match map.get("type") {
       Some(gen_type) => match gen_type {
         &Value::String(ref gen_type) => match Generator::from_map(gen_type, map) {
@@ -882,7 +880,7 @@ impl Generators {
       let cat: String = name.clone().into();
       match name {
         &GeneratorCategory::PATH | &GeneratorCategory::METHOD | &GeneratorCategory::STATUS => {
-          match category.get("") {
+          match category.get(&JSONPath::empty()) {
             Some(generator) => {
               let json = generator.to_json();
               if let Some(json) = json {
@@ -897,7 +895,7 @@ impl Generators {
           for (key, val) in category {
             let json = val.to_json();
             if let Some(json) = json {
-              generators.insert(key.clone(), json);
+              generators.insert(key.orig_string().to_string(), json);
             }
           }
           map.insert(cat.clone(), Value::Object(generators));
@@ -909,20 +907,20 @@ impl Generators {
 
   /// Adds the generator to the category (body, headers, etc.)
   pub fn add_generator(&mut self, category: &GeneratorCategory, generator: Generator) {
-    self.add_generator_with_subcategory(category, "", generator);
+    self.add_generator_with_subcategory(category, JSONPath::empty(), generator);
   }
 
   /// Adds a generator to the category with a sub-category key (i.e. headers or query parameters)
-  pub fn add_generator_with_subcategory<S: Into<String>>(&mut self, category: &GeneratorCategory,
-                                                         subcategory: S, generator: Generator) {
+  pub fn add_generator_with_subcategory(&mut self, category: &GeneratorCategory,
+                                        subcategory: JSONPath, generator: Generator) {
     let category_map = self.categories.entry(category.clone()).or_insert(HashMap::new());
-    category_map.insert(subcategory.into(), generator.clone());
+    category_map.insert(subcategory, generator.clone());
   }
 
   /// If there are generators for the provided category, invokes the closure for all keys and values
   /// in the category.
   pub fn apply_generator<F>(&self, mode: &GeneratorTestMode, category: &GeneratorCategory, mut closure: F)
-    where F: FnMut(&String, &Generator) {
+    where F: FnMut(&JSONPath, &Generator) {
     if self.categories.contains_key(category) && !self.categories[category].is_empty() {
       apply_generators(mode, &self.categories[category], &mut closure)
     }
@@ -973,9 +971,9 @@ impl Default for Generators {
 /// If the mode applies, invoke the callback for each of the generators
 pub fn apply_generators<F>(
   mode: &GeneratorTestMode,
-  generators: &HashMap<String, Generator>,
+  generators: &HashMap<JSONPath, Generator>,
   closure: &mut F
-) where F: FnMut(&String, &Generator) {
+) where F: FnMut(&JSONPath, &Generator) {
   for (key, value) in generators {
     if value.corresponds_to_mode(mode) {
       closure(&key, &value)
@@ -989,7 +987,7 @@ pub fn apply_body_generators(
   body: &OptionalBody,
   content_type: Option<ContentType>,
   context: &HashMap<&str, Value>,
-  generators: &HashMap<String, Generator>
+  generators: &HashMap<JSONPath, Generator>
 ) -> OptionalBody {
   match content_type {
     Some(content_type) => if content_type.is_json() {
@@ -1032,19 +1030,19 @@ pub fn apply_body_generators(
 }
 
 /// Parses the generators from the Value structure
-pub fn generators_from_json(value: &Value) -> Generators {
+pub fn generators_from_json(value: &Value) -> anyhow::Result<Generators> {
   let mut generators = Generators::default();
   match value {
     &Value::Object(ref m) => match m.get("generators") {
       Some(gen_val) => match gen_val {
-        &Value::Object(ref m) => generators.load_from_map(m),
+        &Value::Object(ref m) => generators.load_from_map(m)?,
         _ => ()
       },
       None => ()
     },
     _ => ()
   }
-  generators
+  Ok(generators)
 }
 
 /// Generates a Value structure for the provided generators
@@ -1076,7 +1074,10 @@ macro_rules! generators {
   $(
     let _cat = $crate::models::generators::GeneratorCategory::from_str($category).unwrap();
     $(
-      _generators.add_generator_with_subcategory(&_cat, $subname, $generator);
+      _generators.add_generator_with_subcategory(
+        &_cat,
+        $crate::path_exp::JSONPath::new_unwrap($subname),
+        $generator);
     )*
   )*
 

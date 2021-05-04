@@ -38,7 +38,7 @@ pub struct HttpRequest {
 
 impl HttpRequest {
   /// Builds a `HttpRequest` from a JSON `Value` struct.
-  pub fn from_json(request_json: &Value) -> Self {
+  pub fn from_json(request_json: &Value) -> anyhow::Result<Self> {
     let method_val = match request_json.get("method") {
       Some(v) => match *v {
         Value::String(ref s) => s.to_uppercase(),
@@ -58,15 +58,15 @@ impl HttpRequest {
       None => None
     };
     let headers = headers_from_json(request_json);
-    HttpRequest {
+    Ok(HttpRequest {
       method: method_val,
       path: path_val,
       query: query_val,
       headers: headers.clone(),
       body: body_from_json(request_json, "body", &headers),
-      matching_rules: matchingrules::matchers_from_json(request_json, &None),
-      generators: generators::generators_from_json(request_json)
-    }
+      matching_rules: matchingrules::matchers_from_json(request_json, &None)?,
+      generators: generators::generators_from_json(request_json)?
+    })
   }
 
   /// Converts this `HttpRequest` to a `Value` struct.
@@ -331,19 +331,19 @@ impl Hash for HttpResponse {
 
 impl HttpResponse {
   /// Build an `HttpResponse` from a JSON `Value` struct.
-  pub fn from_json(response: &Value) -> Self {
+  pub fn from_json(response: &Value) -> anyhow::Result<Self> {
     let status_val = match response.get("status") {
       Some(v) => v.as_u64().unwrap() as u16,
       None => 200
     };
     let headers = headers_from_json(response);
-    HttpResponse {
+    Ok(HttpResponse {
       status: status_val,
       headers: headers.clone(),
       body: body_from_json(response, "body", &headers),
-      matching_rules:  matchingrules::matchers_from_json(response, &None),
-      generators:  generators::generators_from_json(response)
-    }
+      matching_rules:  matchingrules::matchers_from_json(response, &None)?,
+      generators:  generators::generators_from_json(response)?
+    })
   }
 
   /// Converts this response to a `Value` struct.

@@ -183,7 +183,7 @@ impl Message {
                   description,
                   provider_states,
                   contents: body_from_json(json, "contents", &None),
-                  matching_rules: matchingrules::matchers_from_json(json, &None),
+                  matching_rules: matchingrules::matchers_from_json(json, &None)?,
                   metadata,
                   generators: Generators::default()
                 })
