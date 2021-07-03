@@ -358,6 +358,7 @@ use crate::matchers::*;
 use crate::models::{HttpPart, Interaction};
 use crate::models::generators::*;
 use crate::models::matchingrules::*;
+use crate::path_exp::{calc_path_weight, path_length};
 
 /// Simple macro to convert a string slice to a `String` struct.
 #[macro_export]
